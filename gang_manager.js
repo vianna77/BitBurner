@@ -1,8 +1,11 @@
 /**
- * Hacking Gang Manager (v27 - Cleaned Log, Focus on Respect/Money).
- * Prioritizes Wanted Level reduction, then Hacking training (up to 150), 
- * then Cyberterrorism (for Respect), then Money Laundering (for Money).
- * * * @param {NS} ns
+ * Hacking Gang Manager (v35 - Time-Based Cycling, Gear/Shield Status - English).
+ * Members cycle between 15 minutes of Respect/Money gain (aggressive) 
+ * and a mandatory phase of Wanted Level reduction until WL reaches 1.0.
+ * Status log uses ⚙️ (Gear) for Production and 🛡️ (Shield) for Reduction
+ * for better visual consistency.
+ *
+ * @param {NS} ns
  */
 export async function main(ns) {
   ns.disableLog("ALL");
@@ -12,7 +15,6 @@ export async function main(ns) {
   // CRUCIAL: CHECK IF GANG IS INITIALIZED
   // ===========================================
   if (!ns.gang.inGang()) {
-    // Keeping ns.tprint here as a FATAL ERROR since the Tail might not be open/visible.
     ns.tprint("FATAL ERROR: You must start a Gang before running this script.");
     return;
   }
@@ -24,31 +26,52 @@ export async function main(ns) {
 
   const RESPECT_TASK_NAME = "Cyberterrorism";
 
-  // HACK SKILL LIMIT before moving to Respect/Money tasks
   const HACK_THRESHOLD = 150;
 
-  // RESPECT LIMIT to prioritize Cyberterrorism over Money Laundering
   const RESPECT_THRESHOLD = 100000;
 
-  // ASCENSION MULTIPLIER LIMIT (Efficient value is 1.7x+)
   const ASCENSION_THRESHOLD = 1.7;
 
-  // Wanted Level limits
-  const WANTED_THRESHOLD = 1.05;
+  // --- TIME-BASED CONTROL ---
+  const PRODUCTION_CYCLE_TIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+  const WANTED_LEVEL_BASELINE = 1.00;
 
   const HACKING_AUGMENTS = [
     "BitWire",
     "DataJack",
+    "Neuralstimulator"
   ];
 
   const HACKING_EQUIPMENT = [
     "NUKE Rootkit",
-    "Soulstealer Rootkit"
+    "Soulstealer Rootkit",
+    "Hmap Node",
+    "Demon Rootkit",
+    "Jack the Ripper"
   ];
+
+  // ============================================
+  // --- STATE VARIABLES ---
+  // ============================================
+  // Timestamp when the last production phase started
+  let productionStartTime = Date.now();
+  // Flag to indicate the current phase (false = Production/Gain, true = Reduction/Cleanup)
+  let isReducingWanted = false;
+
 
   // =======================================
   // --- AUXILIARY FUNCTIONS ---
   // =======================================
+
+  /** Formats milliseconds to MM:SS. */
+  const formatTimeRemaining = (ms) => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
 
   /** Checks and recruits new members. */
   const recruitMember = () => {
@@ -85,14 +108,14 @@ export async function main(ns) {
 
   /** Attempts to ascend the member if the multiplier is high enough. */
   const attemptAscension = (memberName, currentWantedLevel) => {
-    if (currentWantedLevel > WANTED_THRESHOLD) {
+    // Ascension is blocked if WL is above the baseline
+    if (currentWantedLevel > WANTED_LEVEL_BASELINE) {
       return;
     }
 
     const result = ns.gang.getAscensionResult(memberName);
 
     if (result) {
-      // Diagnostic log
       ns.print(`[ASCENSION DIAGNOSIS] ${memberName} HACK Multiplier: ${result.hack.toFixed(3)}x`);
     }
 
@@ -104,21 +127,24 @@ export async function main(ns) {
   };
 
 
-  /** Sets the ideal task for a member based on priorities. */
+  /** Sets the ideal task for a member based on priorities and current cycle state. */
   const setBestTask = (memberName, currentRespect, currentWantedLevel, gangInfo, memberNames) => {
     const memberInfo = ns.gang.getMemberInformation(memberName);
 
-    // --- PRIORITY 1: WANTED LEVEL REDUCTION (ABSOLUTE) ---
-    if (currentWantedLevel > WANTED_THRESHOLD) {
+    // --- PRIORITY 1: REDUCTION PHASE (Forced if isReducingWanted = true) ---
+    if (isReducingWanted) {
 
-      if (memberInfo.task !== WANTED_DECREASE_TASK_NAME) {
-        ns.gang.setMemberTask(memberName, WANTED_DECREASE_TASK_NAME);
-        ns.print(`🛑 ${memberName}: High Wanted Level! Reset to Reduction (${WANTED_DECREASE_TASK_NAME}).`);
+      if (currentWantedLevel > WANTED_LEVEL_BASELINE) {
+        if (memberInfo.task !== WANTED_DECREASE_TASK_NAME) {
+          ns.gang.setMemberTask(memberName, WANTED_DECREASE_TASK_NAME);
+          // Log change of task
+          ns.print(`🛑 ${memberName}: Forced Reduction. WL is high (${currentWantedLevel.toFixed(2)}).`);
+        }
       }
       return;
     }
 
-    // --- PRIORITY 2: HACKING TRAINING (Weak members, lower limit) ---
+    // --- PRIORITY 2: HACKING TRAINING ---
     if (memberInfo.hack < HACK_THRESHOLD) {
       if (memberInfo.task !== TRAINING_TASK_NAME) {
         ns.gang.setMemberTask(memberName, TRAINING_TASK_NAME);
@@ -127,12 +153,11 @@ export async function main(ns) {
       return;
     }
 
-    // --- PRIORITY 3: RESPECT GAIN (CYBERTERRORISM) ---
-    // If Respect is below the threshold (for recruiting/Augs)
+    // --- PRIORITY 3: RESPECT GAIN ---
     if (currentRespect < RESPECT_THRESHOLD) {
       if (memberInfo.task !== RESPECT_TASK_NAME) {
         ns.gang.setMemberTask(memberName, RESPECT_TASK_NAME);
-        ns.print(`⭐ ${memberName}: Low Respect! Set to Respect (${RESPECT_TASK_NAME}).`);
+        ns.print(`⭐ ${memberName}: Production phase. Set to Respect (${RESPECT_TASK_NAME}).`);
       }
       return;
     }
@@ -140,7 +165,7 @@ export async function main(ns) {
     // --- PRIORITY 4: MONEY GAIN ---
     if (memberInfo.task !== MONEY_TASK_NAME) {
       ns.gang.setMemberTask(memberName, MONEY_TASK_NAME);
-      ns.print(`💰 ${memberName}: Ready and Strong! Set to Money Gain (${MONEY_TASK_NAME}).`);
+      ns.print(`💰 ${memberName}: Production phase. Set to Money Gain (${MONEY_TASK_NAME}).`);
     }
   };
 
@@ -150,23 +175,70 @@ export async function main(ns) {
 
   while (true) {
 
-    recruitMember();
-
+    // --- 1. GATHER INFO ---
     const gangInfo = ns.gang.getGangInformation();
     const memberNames = ns.gang.getMemberNames();
     const currentRespect = gangInfo.respect;
-    const currentWantedLevel = gangInfo.wantedLevel;
+    let currentWantedLevel = gangInfo.wantedLevel;
+
+    // ----------------------------------------------------
+    // --- TIME/STATE BASED CYCLE CONTROL ---
+    // ----------------------------------------------------
+    const timeElapsed = Date.now() - productionStartTime;
+
+    if (isReducingWanted) {
+      // REDUCTION PHASE: Exits reduction mode if WL has reached baseline.
+      if (currentWantedLevel <= WANTED_LEVEL_BASELINE) {
+        isReducingWanted = false;
+        productionStartTime = Date.now(); // Resets the timer
+
+        ns.print("✅ CYCLE END: Wanted Level restored to baseline (1.0). Starting Production phase.");
+
+        // --- PRIORITY ACTION AFTER RESET ---
+        recruitMember();
+        for (const memberName of memberNames) {
+          attemptAscension(memberName, currentWantedLevel);
+          buyGear(memberName);
+        }
+      }
+    } else {
+      // PRODUCTION PHASE: Enters reduction mode if the time limit is reached.
+      if (timeElapsed >= PRODUCTION_CYCLE_TIME) {
+        isReducingWanted = true;
+        ns.print(`🛑 CYCLE START: Production time (${ns.tFormat(PRODUCTION_CYCLE_TIME)}) expired. Switching to Reduction phase.`);
+      }
+    }
+
+    // --- 2. COMPACT STATUS LOG ---
+    let cycleStatus;
+    if (isReducingWanted) {
+      // 🛡️ R (Shield/Reduction)
+      cycleStatus = `🛡️ R`;
+    } else {
+      // ⚙️ P (Gear/Production) with remaining time (MM:SS)
+      const timeRemaining = PRODUCTION_CYCLE_TIME - timeElapsed;
+      cycleStatus = `⚙️ P ⏱️ -${formatTimeRemaining(timeRemaining)}`;
+    }
 
     // Status line with Emojis
-    ns.print(`[STATUS] 🌟:${ns.formatNumber(currentRespect)} | 💰:${ns.formatNumber(gangInfo.moneyGainRate)}/s | 🚨:${currentWantedLevel.toFixed(2)} | 🧑‍💻: ${memberNames.length}`);
+    ns.print(`[STATUS] ${cycleStatus} | 🌟:${ns.formatNumber(currentRespect)} | 💰:${ns.formatNumber(gangInfo.moneyGainRate)}/s | 🚨:${currentWantedLevel.toFixed(2)} | 🧑‍💻: ${memberNames.length}`);
 
-    // --- 2. MEMBER MANAGEMENT ---
+    // --- 3. MEMBER MANAGEMENT (Ascension/Gear during Production Phase) ---
+
+    // Executes Ascension and Gear Purchase if WL is at baseline (to catch multipliers at any time)
+    if (currentWantedLevel <= WANTED_LEVEL_BASELINE) {
+      for (const memberName of memberNames) {
+        // attemptAscension is safe as it checks currentWantedLevel > 1.0
+        attemptAscension(memberName, currentWantedLevel);
+        buyGear(memberName);
+      }
+    }
+
+    // Executes setBestTask for all members (main cycle logic)
     for (const memberName of memberNames) {
-      attemptAscension(memberName, currentWantedLevel);
-      buyGear(memberName);
       setBestTask(memberName, currentRespect, currentWantedLevel, gangInfo, memberNames);
     }
 
-    await ns.sleep(20000);
+    await ns.sleep(5000);
   }
 }
