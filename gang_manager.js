@@ -1,13 +1,24 @@
 /**
- * Hacking Gang Manager (v35 - Time-Based Cycling, Gear/Shield Status - English).
- * Members cycle between 15 minutes of Respect/Money gain (aggressive) 
- * and a mandatory phase of Wanted Level reduction until WL reaches 1.0.
- * Status log uses ⚙️ (Gear) for Production and 🛡️ (Shield) for Reduction
- * for better visual consistency.
+ * Hacking Gang Manager (v40.1 - Cycle End Time Logic + Ascension Diagnosis).
+ * Uses a fixed 'cycleEndTime' timestamp to manage dynamic extensions safely (15-30 min cycle).
+ * Includes detailed logging for Ascension checks after Wanted Level is restored.
  *
  * @param {NS} ns
  */
+export function autocomplete(data, args) {
+  return [];
+}
+
+/** @param {NS} ns */
 export async function main(ns) {
+  // --- Script Header / Purpose ---
+  ns.tprint("==================================================================");
+  ns.tprint("⚙️ GANG MANAGER: DYNAMIC PRODUCTION CYCLE (15-30 MIN) - V40.1");
+  ns.tprint(" ");
+  ns.tprint("Controle de Ciclo: 15 minutos base + 3 extensões de 5 minutos.");
+  ns.tprint("Diagnóstico: Logs de ascensão adicionados na fase de produção.");
+  ns.tprint("==================================================================");
+
   ns.disableLog("ALL");
   ns.ui.openTail();
 
@@ -23,20 +34,20 @@ export async function main(ns) {
   const TRAINING_TASK_NAME = "Train Hacking";
   const WANTED_DECREASE_TASK_NAME = "Ethical Hacking";
   const MONEY_TASK_NAME = "Money Laundering";
-
   const RESPECT_TASK_NAME = "Cyberterrorism";
 
   const HACK_THRESHOLD = 150;
-
   const RESPECT_THRESHOLD = 100000;
-
-  const ASCENSION_THRESHOLD = 1.7;
+  const ASCENSION_THRESHOLD = 1.7; // Multiplicador mínimo para tentar Ascensão
 
   // --- TIME-BASED CONTROL ---
-  const PRODUCTION_CYCLE_TIME = 15 * 60 * 1000; // 15 minutes in milliseconds
+  const INITIAL_CYCLE_TIME = 15 * 60 * 1000; // 15 minutes 
+  const EXTENSION_TIME = 5 * 60 * 1000;       // 5 minutes 
+  const MAX_EXTENSIONS = 3;                   // Max 3 extensions 
 
   const WANTED_LEVEL_BASELINE = 1.00;
 
+  // --- GEAR CONFIG ---
   const HACKING_AUGMENTS = [
     "BitWire",
     "DataJack",
@@ -54,11 +65,11 @@ export async function main(ns) {
   // ============================================
   // --- STATE VARIABLES ---
   // ============================================
-  // Timestamp when the last production phase started
-  let productionStartTime = Date.now();
-  // Flag to indicate the current phase (false = Production/Gain, true = Reduction/Cleanup)
+  // Timestamp when the current production phase *must* end.
+  let cycleEndTime = Date.now() + INITIAL_CYCLE_TIME;
   let isReducingWanted = false;
-
+  let extensionCount = 0;
+  let lastMoneyGainRate = 0;
 
   // =======================================
   // --- AUXILIARY FUNCTIONS ---
@@ -116,7 +127,10 @@ export async function main(ns) {
     const result = ns.gang.getAscensionResult(memberName);
 
     if (result) {
-      ns.print(`[ASCENSION DIAGNOSIS] ${memberName} HACK Multiplier: ${result.hack.toFixed(3)}x`);
+      // ADIÇÃO DE LOG DE DIAGNÓSTICO
+      if (result.hack < ASCENSION_THRESHOLD) {
+        ns.print(`[ASCENSION DIAGNOSIS] ${memberName} HACK Multiplier: ${result.hack.toFixed(3)}x (Next: ${ASCENSION_THRESHOLD}x)`);
+      }
     }
 
     if (result && result.hack >= ASCENSION_THRESHOLD) {
@@ -128,16 +142,14 @@ export async function main(ns) {
 
 
   /** Sets the ideal task for a member based on priorities and current cycle state. */
-  const setBestTask = (memberName, currentRespect, currentWantedLevel, gangInfo, memberNames) => {
+  const setBestTask = (memberName, currentRespect, currentWantedLevel) => {
     const memberInfo = ns.gang.getMemberInformation(memberName);
 
-    // --- PRIORITY 1: REDUCTION PHASE (Forced if isReducingWanted = true) ---
+    // --- PRIORITY 1: REDUCTION PHASE ---
     if (isReducingWanted) {
-
       if (currentWantedLevel > WANTED_LEVEL_BASELINE) {
         if (memberInfo.task !== WANTED_DECREASE_TASK_NAME) {
           ns.gang.setMemberTask(memberName, WANTED_DECREASE_TASK_NAME);
-          // Log change of task
           ns.print(`🛑 ${memberName}: Forced Reduction. WL is high (${currentWantedLevel.toFixed(2)}).`);
         }
       }
@@ -169,6 +181,7 @@ export async function main(ns) {
     }
   };
 
+
   // ============================================
   // MAIN GANG MAINTENANCE LOOP
   // ============================================
@@ -179,22 +192,29 @@ export async function main(ns) {
     const gangInfo = ns.gang.getGangInformation();
     const memberNames = ns.gang.getMemberNames();
     const currentRespect = gangInfo.respect;
-    let currentWantedLevel = gangInfo.wantedLevel;
+    const currentWantedLevel = gangInfo.wantedLevel;
+    const currentMoneyGainRate = gangInfo.moneyGainRate;
+
+    // Time calculations simplified using cycleEndTime
+    const timeRemaining = cycleEndTime - Date.now();
+    const isCycleExpired = timeRemaining <= 0;
 
     // ----------------------------------------------------
     // --- TIME/STATE BASED CYCLE CONTROL ---
     // ----------------------------------------------------
-    const timeElapsed = Date.now() - productionStartTime;
 
     if (isReducingWanted) {
       // REDUCTION PHASE: Exits reduction mode if WL has reached baseline.
       if (currentWantedLevel <= WANTED_LEVEL_BASELINE) {
         isReducingWanted = false;
-        productionStartTime = Date.now(); // Resets the timer
+        // Resets the timer for the NEW 15-minute cycle
+        cycleEndTime = Date.now() + INITIAL_CYCLE_TIME;
+        extensionCount = 0; // Reset extensions
 
         ns.print("✅ CYCLE END: Wanted Level restored to baseline (1.0). Starting Production phase.");
 
         // --- PRIORITY ACTION AFTER RESET ---
+        // Executes Ascension/Gear ONLY on cycle restart for critical tasks.
         recruitMember();
         for (const memberName of memberNames) {
           attemptAscension(memberName, currentWantedLevel);
@@ -202,33 +222,73 @@ export async function main(ns) {
         }
       }
     } else {
-      // PRODUCTION PHASE: Enters reduction mode if the time limit is reached.
-      if (timeElapsed >= PRODUCTION_CYCLE_TIME) {
-        isReducingWanted = true;
-        ns.print(`🛑 CYCLE START: Production time (${ns.tFormat(PRODUCTION_CYCLE_TIME)}) expired. Switching to Reduction phase.`);
+      // PRODUCTION PHASE: Extends or Enters reduction mode if time has run out.
+
+      // --- DYNAMIC EXTENSION CHECK ---
+      if (isCycleExpired) {
+
+        const moneyRising = currentMoneyGainRate > lastMoneyGainRate;
+        const extensionAvailable = extensionCount < MAX_EXTENSIONS;
+
+        // --- EXTENSION DEBUG ---
+        ns.print("--- EXTENSION DEBUG ---");
+        ns.print(`💰 Money Gain Rate (Current vs. Last): ${ns.formatNumber(currentMoneyGainRate)} vs. ${ns.formatNumber(lastMoneyGainRate)} (Rising: ${moneyRising})`);
+        ns.print(`⏱️ Extension Count (Current vs. Max): ${extensionCount}/${MAX_EXTENSIONS} (Available: ${extensionAvailable})`);
+        ns.print(`Status: ${moneyRising && extensionAvailable ? "EXTENSION GRANTED" : "EXTENSION DENIED"}`);
+        ns.print("-------------------------");
+        // ----------------------------------------------------------
+
+        // Check if money gain rate is INCREASING AND we haven't hit the max extensions
+        if (moneyRising && extensionAvailable) {
+
+          extensionCount++; // Use one extension
+
+          // SOLUTION: Add time to the end time timestamp, making the cycle longer
+          cycleEndTime += EXTENSION_TIME;
+
+          // --- TOAST IMPLEMENTATION ---
+          const currentTotalTime = INITIAL_CYCLE_TIME + (extensionCount * EXTENSION_TIME);
+          const toastMessage = `📈 PRODUCTION EXTENDED: Cycle extended by 5 min. Total: ${ns.tFormat(currentTotalTime)}.`;
+          const toastDuration = 60000; // 60 seconds
+          ns.toast(toastMessage, "info", toastDuration);
+          // --------------------------------------------------
+
+          ns.print(`📈 EXTENSION GRANTED: Money gain is still rising! Cycle extended by 5 min (Extension: ${extensionCount}/${MAX_EXTENSIONS}).`);
+
+        } else {
+          // --- END CYCLE CHECK: Extension DENIED or NOT Available ---
+          isReducingWanted = true;
+          // Calculate the actual total time of the cycle that just ended
+          const finalTotalTime = INITIAL_CYCLE_TIME + (extensionCount * EXTENSION_TIME);
+          ns.print(`🛑 CYCLE START: Production time (${ns.tFormat(finalTotalTime)}) expired. Switching to Reduction phase.`);
+        }
       }
     }
 
+    // --- Update for next iteration ---
+    lastMoneyGainRate = currentMoneyGainRate;
+
     // --- 2. COMPACT STATUS LOG ---
     let cycleStatus;
+    const totalCurrentDuration = INITIAL_CYCLE_TIME + (extensionCount * EXTENSION_TIME);
+    const totalCurrentDurationMinutes = Math.floor(totalCurrentDuration / (60 * 1000));
+
     if (isReducingWanted) {
       // 🛡️ R (Shield/Reduction)
       cycleStatus = `🛡️ R`;
     } else {
       // ⚙️ P (Gear/Production) with remaining time (MM:SS)
-      const timeRemaining = PRODUCTION_CYCLE_TIME - timeElapsed;
-      cycleStatus = `⚙️ P ⏱️ -${formatTimeRemaining(timeRemaining)}`;
+      cycleStatus = `⚙️ P (${totalCurrentDurationMinutes}m, +${extensionCount}) ⏱️ -${formatTimeRemaining(timeRemaining)}`;
     }
 
     // Status line with Emojis
-    ns.print(`[STATUS] ${cycleStatus} | 🌟:${ns.formatNumber(currentRespect)} | 💰:${ns.formatNumber(gangInfo.moneyGainRate)}/s | 🚨:${currentWantedLevel.toFixed(2)} | 🧑‍💻: ${memberNames.length}`);
+    ns.print(`[STATUS] ${cycleStatus} | 🌟:${ns.formatNumber(currentRespect)} | 💰:${ns.formatNumber(currentMoneyGainRate)}/s | 🚨:${currentWantedLevel.toFixed(2)} | 🧑‍💻: ${memberNames.length}`);
 
-    // --- 3. MEMBER MANAGEMENT (Ascension/Gear during Production Phase) ---
+    // --- 3. MEMBER MANAGEMENT (Ascension/Gear/Task) ---
 
-    // Executes Ascension and Gear Purchase if WL is at baseline (to catch multipliers at any time)
+    // Executes Ascension and Gear Purchase if WL is at baseline (on every tick in production phase)
     if (currentWantedLevel <= WANTED_LEVEL_BASELINE) {
       for (const memberName of memberNames) {
-        // attemptAscension is safe as it checks currentWantedLevel > 1.0
         attemptAscension(memberName, currentWantedLevel);
         buyGear(memberName);
       }
@@ -236,9 +296,9 @@ export async function main(ns) {
 
     // Executes setBestTask for all members (main cycle logic)
     for (const memberName of memberNames) {
-      setBestTask(memberName, currentRespect, currentWantedLevel, gangInfo, memberNames);
+      setBestTask(memberName, currentRespect, currentWantedLevel);
     }
 
-    await ns.sleep(5000);
+    await ns.sleep(10000);
   }
 }
