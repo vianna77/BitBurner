@@ -1,14 +1,19 @@
-// VERSION: BN4 Startup Script v1.9.1 AFK grinder
+// VERSION: BN4 Startup Script v2.0.9
 
 /** @param {NS} ns */
 export async function main(ns) {
   ns.disableLog("ALL");
   ns.ui.openTail();
 
+  // Helper para Timestamp HH:MM
+  const t = () => {
+    const date = new Date();
+    return `[${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}]`;
+  };
+
   ns.tprint(`
-    === BN4 Startup Script v1.9.1 ===
-    Intent: Automate early BN4 progression (Singularity).
-    Updates: Applied user-defined Mug priority logic.
+    ${t()} === BN4 Startup Script v2.0.9 ===
+    Updates: Added explicit travel failure logging in checkTravel.
     =================================
   `);
 
@@ -32,7 +37,7 @@ export async function main(ns) {
   const GYM = "Powerhouse Gym";
 
   const CRIME_LOOP_INTERVAL = 60_000;
-  const LOOP_INTERVAL = 30_000;
+  const LOOP_INTERVAL = 300_000;
   const WAITING_EXECUTION_TIME = 10_000;
 
   const TARGET_STATS = {
@@ -52,26 +57,63 @@ export async function main(ns) {
     "SQLInject.exe",
   ];
 
+  const PRIORITY_FACTIONS = ["The Black Hand", "NiteSec", "CyberSec", "Tian Di Hui"];
+  const FACTION_SERVERS = {
+    "The Black Hand": "I.I.I.I",
+    "NiteSec": "avmnite-02h",
+    "CyberSec": "CSEC"
+  };
+
   const STATE = {
     WARMUP: "WARMUP",
     CRIME: "CRIME",
     STUDY_HACK: "STUDY_HACK",
     PROGRESSION: "PROGRESSION",
+    FACTION_WORK: "FACTION_WORK",
   };
 
   let state = STATE.WARMUP;
+  let currentFaction = "";
 
   // =========================
   // HELPER FUNCTIONS
   // =========================
   function checkTravel(player, money) {
     if (player.city !== TARGET_CITY && money >= TRAVEL_COST) {
-      if (ns.singularity.travelToCity(TARGET_CITY)) {
-        ns.print(`[TRAVEL] Moved to ${TARGET_CITY}`);
+      const success = ns.singularity.travelToCity(TARGET_CITY);
+      if (success) {
+        ns.print(`${t()} [TRAVEL] Moved to ${TARGET_CITY}`);
         return true;
+      } else {
+        ns.print(`${t()} [TRAVEL FAIL] Could not move to ${TARGET_CITY}`);
       }
     }
     return false;
+  }
+
+  async function installBackdoor(target) {
+    const path = [];
+    const visited = new Set();
+    function findPath(current, goal, p) {
+      visited.add(current);
+      if (current === goal) return true;
+      for (const n of ns.scan(current)) {
+        if (!visited.has(n)) {
+          p.push(n);
+          if (findPath(n, goal, p)) return true;
+          p.pop();
+        }
+      }
+      return false;
+    }
+    if (findPath("home", target, path)) {
+      for (const node of path) ns.singularity.connect(node);
+      await ns.singularity.installBackdoor();
+      ns.getServer(target).backdoorInstalled ?
+        ns.print(`${t()} [SUCCESS] Backdoor active on ${target}`) :
+        ns.print(`${t()} [PENDING] Backdoor not installed on ${target}`);
+      ns.singularity.connect("home");
+    }
   }
 
   // =========================
@@ -88,16 +130,21 @@ export async function main(ns) {
     const money = ns.getServerMoneyAvailable("home");
     const p = ns.getPlayer();
 
+    const invitations = ns.singularity.checkFactionInvitations();
+    for (const inv of invitations) {
+      if (PRIORITY_FACTIONS.includes(inv)) ns.singularity.joinFaction(inv);
+    }
+
     switch (state) {
 
       case STATE.WARMUP: {
         const needsStats = GYM_STATS.some(s => p.skills[s] < TARGET_STATS[s]);
         const hasTravelMoney = money >= TRAVEL_COST;
 
-        ns.print(`[DEBUG WARMUP] Stats: Str:${p.skills.strength}/${TARGET_STATS.strength}, Def:${p.skills.defense}/${TARGET_STATS.defense}, Dex:${p.skills.dexterity}/${TARGET_STATS.dexterity}, Agi:${p.skills.agility}/${TARGET_STATS.agility}`);
-        
+        ns.print(`${t()} [DEBUG WARMUP] Stats: Str:${p.skills.strength}/${TARGET_STATS.strength}, Def:${p.skills.defense}/${TARGET_STATS.defense}, Dex:${p.skills.dexterity}/${TARGET_STATS.dexterity}, Agi:${p.skills.agility}/${TARGET_STATS.agility}`);
+
         if (!needsStats && hasTravelMoney) {
-          ns.print("[STATE TRANSITION] WARMUP -> CRIME: Stats and travel funds ready.");
+          ns.print(`${t()} [STATE TRANSITION] WARMUP -> CRIME: Stats and travel funds ready.`);
           state = STATE.CRIME;
           break;
         }
@@ -109,23 +156,22 @@ export async function main(ns) {
           if (!work || work.type !== "GYM" || work.gymStat?.toLowerCase() !== statToTrain) {
             ns.singularity.stopAction();
             ns.singularity.gymWorkout(GYM, statToTrain, true);
-            ns.print(`[WARMUP] Training ${statToTrain}`);
+            ns.print(`${t()} [WARMUP] Training ${statToTrain}`);
           }
         } else {
           if (!work || work.type !== "CRIME") {
             ns.singularity.stopAction();
             ns.singularity.commitCrime(SHOPLIFT, true);
-            ns.print(`[WARMUP FUNDING] Farming money for stats or travel.`);
+            ns.print(`${t()} [WARMUP FUNDING] Farming money for stats or travel.`);
           }
         }
-        await ns.sleep(2000); 
+        await ns.sleep(2000);
         break;
       }
 
       case STATE.CRIME: {
         checkTravel(p, money);
 
-        // SUA LÓGICA DE PRIORIDADE:
         let bestCrime = SHOPLIFT;
         if (ns.singularity.getCrimeChance(MUG) > 0.75) {
           bestCrime = MUG;
@@ -137,11 +183,19 @@ export async function main(ns) {
         if (!work || work.type !== "CRIME" || (work.type === "CRIME" && work.crimeType !== bestCrime)) {
           ns.singularity.stopAction();
           ns.singularity.commitCrime(bestCrime, true);
-          ns.print(`[CRIME] Committing ${bestCrime}`);
+          ns.print(`${t()} [CRIME] Committing ${bestCrime}`);
+        }
+
+        const factionToWork = PRIORITY_FACTIONS.find(f => p.factions.includes(f));
+        if (factionToWork) {
+          currentFaction = factionToWork;
+          state = STATE.FACTION_WORK;
+          ns.print(`${t()} [STATE TRANSITION] CRIME -> FACTION_WORK (${factionToWork})`);
+          break;
         }
 
         if (money >= MIN_MONEY_FOR_UPGRADE) {
-          ns.print(`[STATE TRANSITION] CRIME -> STUDY_HACK`);
+          ns.print(`${t()} [STATE TRANSITION] CRIME -> STUDY_HACK`);
           state = STATE.STUDY_HACK;
           break;
         }
@@ -151,7 +205,7 @@ export async function main(ns) {
 
       case STATE.STUDY_HACK: {
         if (money <= MIN_MONEY_TO_STUDY) {
-          ns.print(`[STATE TRANSITION] STUDY_HACK -> CRIME: Funding low.`);
+          ns.print(`${t()} [STATE TRANSITION] STUDY_HACK -> CRIME: Funding low.`);
           state = STATE.CRIME;
           break;
         }
@@ -162,7 +216,7 @@ export async function main(ns) {
         if (!work || work.type !== "CLASS") {
           ns.singularity.stopAction();
           ns.singularity.universityCourse(UNIVERSITY, COURSE, true);
-          ns.print(`[STUDY] Studying Algorithms at ${UNIVERSITY}`);
+          ns.print(`${t()} [STUDY] Studying Algorithms at ${UNIVERSITY}`);
         }
 
         const visited = new Set(["home"]);
@@ -189,7 +243,9 @@ export async function main(ns) {
             ns.getServerRequiredHackingLevel(server) > hackLvl ||
             ns.getServerMaxRam(server) < 8 ||
             ns.isRunning(HACK_SCRIPT, server, server.toString(), "true")
-          ) continue;
+          ) {
+            continue;
+          }
 
           const portsRequired = ns.getServerNumPortsRequired(server);
 
@@ -197,22 +253,52 @@ export async function main(ns) {
             const nextProgram = PORT_PROGRAMS[portsOwned];
             const cost = ns.singularity.getDarkwebProgramCost(nextProgram);
             state = (money >= cost) ? STATE.PROGRESSION : STATE.CRIME;
-            ns.print(`[STATE TRANSITION] STUDY_HACK -> ${state} for ${nextProgram} (Target: ${server})`);
+            ns.print(`${t()} [STATE TRANSITION] STUDY_HACK -> ${state} for ${nextProgram} (Target: ${server})`);
             break;
           }
 
+          if (Object.values(FACTION_SERVERS).includes(server) && ns.hasRootAccess(server) && !ns.getServer(server).backdoorInstalled) {
+            ns.print(`${t()} Calling installBackdoor for ${server}`);
+            await installBackdoor(server);
+          }
+
           ns.exec(HACK_SCRIPT, "home", 1, server);
-          ns.print(`[DEPLOY] ${HACK_SCRIPT} on ${server}`);
+          ns.print(`${t()} [DEPLOY] ${HACK_SCRIPT} on ${server}`);
           await ns.sleep(WAITING_EXECUTION_TIME);
+        }
+
+        const factionToWork = PRIORITY_FACTIONS.find(f => p.factions.includes(f));
+        if (factionToWork) {
+          currentFaction = factionToWork;
+          state = STATE.FACTION_WORK;
+          ns.print(`${t()} [STATE TRANSITION] STUDY_HACK -> FACTION_WORK (${factionToWork})`);
+          break;
         }
 
         await ns.sleep(LOOP_INTERVAL);
         break;
       }
 
+      case STATE.FACTION_WORK: {
+        const work = ns.singularity.getCurrentWork();
+        if (!p.factions.includes(currentFaction) || money < MIN_MONEY_TO_STUDY) {
+          state = STATE.CRIME;
+          break;
+        }
+        if (!work || work.type !== "FACTION" || work.factionName !== currentFaction) {
+          ns.singularity.stopAction();
+          ns.singularity.workForFaction(currentFaction, "Hacking Contracts", true);
+          ns.print(`${t()} [FACTION] Working for ${currentFaction}`);
+        }
+        await ns.sleep(LOOP_INTERVAL);
+        ns.print(`${t()} [STATE TRANSITION] FACTION_WORK -> STUDY_HACK (Rescan)`);
+        state = STATE.STUDY_HACK;
+        break;
+      }
+
       case STATE.PROGRESSION: {
         if (!ns.hasTorRouter()) {
-          if (ns.singularity.purchaseTor()) ns.print("[PROGRESSION] TOR purchased.");
+          if (ns.singularity.purchaseTor()) ns.print(`${t()} [PROGRESSION] TOR purchased.`);
           await ns.sleep(1000);
           break;
         }
@@ -223,7 +309,7 @@ export async function main(ns) {
           const cost = ns.singularity.getDarkwebProgramCost(prog);
 
           if (money >= cost) {
-            if (ns.singularity.purchaseProgram(prog)) ns.print(`[PROGRESSION] Bought ${prog}`);
+            if (ns.singularity.purchaseProgram(prog)) ns.print(`${t()} [PROGRESSION] Bought ${prog}`);
           } else {
             state = STATE.CRIME;
           }
