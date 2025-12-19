@@ -1,4 +1,4 @@
-// VERSION: Cluster Deployer v1.1.1
+// VERSION: Cluster Deployer v1.1.2
 // DESCRIPTION: Deploys simpleHack.js to all "p-" servers. 
 //              Checks if script is already running before deployment.
 
@@ -22,7 +22,7 @@ export async function main(ns) {
     target = target.replace(/-\d+$/, "");
 
     if (ns.isRunning(script, "p-"+target, target.toString())) {
-      ns.tprint(`SKIPPED: ["p-"${target}] ${script} is already running.`);
+      ns.tprint(`🟡 ["p-"${target}] ${script} is already running.`);
       continue;
     }
 
@@ -43,19 +43,19 @@ export async function main(ns) {
       let pid = ns.exec(script, server, tSimple + 1, target);
 
       if (pid !== 0) {
-        ns.tprint(`SUCCESS: [${server}] running ${script} with ${tSimple + 1} threads targeting ${target}.`);
+        ns.tprint(`✅ [${server}] running ${script} with ${tSimple + 1} threads targeting ${target}.`);
       } else {
         // Fallback Attempt 2: tSimple
         pid = ns.exec(script, server, tSimple, target);
         
         if (pid !== 0) {
-          ns.tprint(`SUCCESS: [${server}] running ${script} with ${tSimple} threads targeting ${target}.`);
+          ns.tprint(`✅ [${server}] running ${script} with ${tSimple} threads targeting ${target}.`);
         } else {
           ns.tprint(`ERROR: Failed to execute ${script} on ${server} even with ${tSimple} threads.`);
         }
       }
     } else {
-      ns.tprint(`SKIPPED: [${server}] Not enough RAM for ${script}.`);
+      ns.tprint(`🛑 [${server}] Not enough RAM for ${script}.`);
     }
   }
   ns.tprint("==================================================================");
