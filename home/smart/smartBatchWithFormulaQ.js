@@ -89,9 +89,10 @@ export async function main(ns) {
           break;
         }
         
-        // Wait for running processes to finish
-        if (ns.ps(thisServer).length > 1) {
-          ns.print(`${t()} ⏳ Waiting for processes to complete...`);
+        // Wait for running processes to finish (excluding this script)
+        const runningProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartBatchWithFormulaQ.js');
+        if (runningProcesses.length > 0) {
+          ns.print(`${t()} ⏳ Waiting for ${runningProcesses.length} processes to complete...`);
           await ns.sleep(2000);
           break;
         }
