@@ -72,9 +72,9 @@ export async function main(ns) {
 
   const printHeader = (gang) => {
     ns.print("------------------------------------------------------------------------------------------------");
-    ns.print(`  COMBAT GANG CONTROL v1.2.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
+    ns.print(`  COMBAT GANG CONTROL v1.3.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
     ns.print(`  State: ${state} | Efficiency: ${(gang.wantedPenalty * 100).toFixed(2)}% | Members: ${ns.gang.getMemberNames().length}/12`);
-    ns.print(`  Linear Regression Money Detection | Dynamic Thresholds | Smart Ascension`);
+    ns.print(`  Linear Regression | Dynamic Thresholds | Smart Ascension | Late Game Optimization`);
     ns.print("------------------------------------------------------------------------------------------------");
   };
 
@@ -221,6 +221,25 @@ export async function main(ns) {
     return Math.min(info.str, info.def, info.dex, info.agi);
   };
 
+  const hasEnoughReputation = (gang) => {
+    try {
+      const faction = gang.faction;
+      const availableAugs = ns.singularity.getAugmentationsFromFaction(faction);
+      
+      let maxRepRequired = 0;
+      for (const aug of availableAugs) {
+        const repReq = ns.singularity.getAugmentationRepReq(aug);
+        if (repReq > maxRepRequired) {
+          maxRepRequired = repReq;
+        }
+      }
+      
+      return gang.respect >= maxRepRequired;
+    } catch (e) {
+      return false; // Fallback if singularity functions not available
+    }
+  };
+
   // ============================================================
   // MAIN LOOP
   // ============================================================
@@ -299,21 +318,36 @@ export async function main(ns) {
           return avgB - avgA;
         });
         
+        const hasMaxRep = hasEnoughReputation(gang);
+        if (hasMaxRep) {
+          ns.print(`${getTS()}[STRATEGY] 💰 Late Game Mode: Max reputation achieved, focusing on money generation`);
+        }
+        
         members.forEach((m, i) => {
           buyGear(m);
           const info = ns.gang.getMemberInformation(m);
           
           if (needsCharismaTraining(info)) {
             assign(m, "Train Charisma");
-          } else if (i < RESPECT_SLOTS) {
-            const lowestStat = getLowestCombatStat(info);
-            if (lowestStat < STR_THRESHOLD) {
-              assign(m, TRAIN_TASK);
+          } else if (hasMaxRep) {
+            // Late game: focus on money with wanted control
+            if (i === 0 && gang.wantedLevel > 1) {
+              assign(m, WANTED_TASK); // Only 1 member for wanted control when needed
             } else {
-              assign(m, TERRORISM_TASK);
+              assign(m, "Traffick Illegal Arms"); // Rest focus on money
             }
           } else {
-            assignBestMoney(m);
+            // Early/mid game: current strategy
+            if (i < RESPECT_SLOTS) {
+              const lowestStat = getLowestCombatStat(info);
+              if (lowestStat < STR_THRESHOLD) {
+                assign(m, TRAIN_TASK);
+              } else {
+                assign(m, TERRORISM_TASK);
+              }
+            } else {
+              assignBestMoney(m);
+            }
           }
         });
 
