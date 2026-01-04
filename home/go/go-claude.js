@@ -136,10 +136,12 @@ export async function main(ns) {
       let y_move = undefined;
 
       // 1. ATARI CAPTURE - ABSOLUTE PRIORITY - NO FILTERS!
+      ns.print(`[DEBUG] Scanning for enemy atari...`);
       for (let x = 0; x < 5; x++) {
         for (let y = 0; y < 5; y++) {
           if (board[x][y] === 'O') {
-            const libs = getLiberties(board, x, y);
+            const libs = getLiberties(board, x, y, new Set()); // Fresh visited set!
+            ns.print(`[DEBUG] Enemy stone at [${x},${y}] has ${libs.size} liberties`);
             if (libs.size === 1) {
               const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
               if (validMoves[lx][ly]) {
@@ -158,7 +160,7 @@ export async function main(ns) {
         for (let x = 0; x < 5; x++) {
           for (let y = 0; y < 5; y++) {
             if (board[x][y] === 'X') {
-              const libs = getLiberties(board, x, y);
+              const libs = getLiberties(board, x, y, new Set()); // Fresh visited set!
               if (libs.size === 1) {
                 const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
                 if (validMoves[lx][ly] && !wouldBeSuicide(board, lx, ly)) {

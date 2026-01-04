@@ -8,7 +8,13 @@ export async function main(ns) {
   
   // Combat-specific thresholds
   const STR_THRESHOLD = 100;
-  const ASCENSION_THRESHOLD = 1.5;
+  const CHA_THRESHOLD = 10;
+  const getDynamicAscensionThreshold = (info) => {
+    const maxMultiplier = Math.max(info.str_asc_mult, info.def_asc_mult, info.dex_asc_mult, info.agi_asc_mult);
+    if (maxMultiplier < 10) return 1.6;   // Early game: quick ascensions
+    if (maxMultiplier < 100) return 1.4;  // Mid game: balanced growth
+    return 1.3;                           // Late game: incremental gains
+  };
   
   // Combat Tasks
   const TRAIN_TASK = "Train Combat";
@@ -21,16 +27,23 @@ export async function main(ns) {
   const FAILSAFE_MAX_PHASE_TIME = 30 * 60 * 1000;
   const MONEY_TREND_WINDOW = 10;
   const MONEY_GROWTH_EPSILON = 0.01;
-  const WANTED_PENALTY_MIN = 0.85;
+  const getDynamicWantedMin = (memberCount) => {
+    if (memberCount >= 11) return 0.65;  // Full gang: more aggressive
+    if (memberCount >= 7) return 0.80;   // Medium gang: balanced
+    return 0.85;                         // Small gang: conservative
+  };
   const RESPECT_SLOTS = 6;
   
   // Combat Equipment
   const GEAR = [
     "Baseball Bat", "Katana", "Glock 18C", "P90C", "Steyr AUG", "AK-47", "M15A10 Assault Rifle", "AWM Sniper Rifle",
     "Bulletproof Vest", "Full Body Armor", "Liquid Body Armor", "Graphene Plating Armor",
-    "Ford Flex V20", "ATX1070 Superbike", "Mercedes-Benz S9001", "White Ferrari",
     "Bionic Arms", "Bionic Legs", "Bionic Spine", "BrachiBlades", "Nanofiber Weave", "Synthetic Heart", "Synfibril Muscle", "Graphene Bone Lacings"
   ];
+
+  const VEHICLES = [
+    "Ford Flex V20", "ATX1070 Superbike", "Mercedes-Benz S9001", "White Ferrari"
+  ];  
 
   // ============================================================
   // STATE MACHINE
@@ -59,17 +72,20 @@ export async function main(ns) {
 
   const printHeader = (gang) => {
     ns.print("------------------------------------------------------------------------------------------------");
-    ns.print(`  COMBAT GANG CONTROL v1.0.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
+    ns.print(`  COMBAT GANG CONTROL v1.2.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
     ns.print(`  State: ${state} | Efficiency: ${(gang.wantedPenalty * 100).toFixed(2)}% | Members: ${ns.gang.getMemberNames().length}/12`);
+    ns.print(`  Linear Regression Money Detection | Dynamic Thresholds | Smart Ascension`);
     ns.print("------------------------------------------------------------------------------------------------");
   };
 
   const printStatus = (gang, force = false) => {
     const currEff = (gang.wantedPenalty * 100).toFixed(1);
     const canBuy = ns.peek(PURCHASE_PORT) !== "DISABLE";
+    const memberCount = ns.gang.getMemberNames().length;
+    const minEff = (getDynamicWantedMin(memberCount) * 100).toFixed(0);
     
     if (force || Math.abs(parseFloat(currEff) - lastLoggedEfficiency) >= 0.5) {
-      ns.print(`${getTS()}[STATUS] 📊 ${state} | $${ns.formatNumber(gang.moneyGainRate)}/s | Eff: ${currEff}% | Buy: ${canBuy ? "✅" : "🛑"}`);
+      ns.print(`${getTS()}[STATUS] 📊 ${state} | $${ns.formatNumber(gang.moneyGainRate)}/s | Eff: ${currEff}%/${minEff}% | Buy: ${canBuy ? "✅" : "🛑"}`);
       if (!canBuy) ns.toast("Combat Gang: Global Purchases are DISABLED (Port 3)", "warning", 120000);
       lastLoggedEfficiency = parseFloat(currEff);
     }
@@ -99,16 +115,37 @@ export async function main(ns) {
 
   const moneySaturated = () => {
     if (moneyHistory.length < MONEY_TREND_WINDOW) return false;
-    const a = moneyHistory[0];
-    const b = moneyHistory[moneyHistory.length - 1];
-    return (b - a) / Math.max(a, 1) < MONEY_GROWTH_EPSILON;
+
+    const n = moneyHistory.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+
+    for (let i = 0; i < n; i++) {
+      const x = i;
+      const y = moneyHistory[i];
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumXX += x * x;
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / Math.max((n * sumXX - sumX * sumX), 1);
+    const avg = sumY / n;
+
+    return slope / Math.max(avg, 1) < MONEY_GROWTH_EPSILON;
   };
 
   const assign = (m, task) => {
     const info = ns.gang.getMemberInformation(m);
     if (info.task === task) return;
     ns.gang.setMemberTask(m, task);
-    ns.print(`${getTS()}[TASK] 🥊 ${m} (S:${Math.floor(info.str)} D:${Math.floor(info.def)} X:${Math.floor(info.dex)} A:${Math.floor(info.agi)}) -> ${task}`);
+    ns.print(`${getTS()}[TASK] 🥊 ${m} (S:${Math.floor(info.str)} D:${Math.floor(info.def)} X:${Math.floor(info.dex)} A:${Math.floor(info.agi)} C:${Math.floor(info.cha)}) -> ${task}`);
+  };
+
+  const needsCharismaTraining = (info) => {
+    return info.cha < CHA_THRESHOLD;
   };
 
   const buyGear = (m) => {
@@ -116,17 +153,28 @@ export async function main(ns) {
     const info = ns.gang.getMemberInformation(m);
     const cash = ns.getServerMoneyAvailable("home");
     
+    // Buy regular gear first
     for (const g of GEAR) {
       if (info.upgrades.includes(g) || info.augmentations.includes(g)) continue;
-      if (g === "Ford Flex V20" && info.agi >= 20) continue;
-      if (g === "ATX1070 Superbike" && info.agi >= 50) continue;
-      if (g === "Mercedes-Benz S9001" && info.agi >= 100) continue;
-      if (g === "White Ferrari" && info.agi >= 150) continue;
-
       const cost = ns.gang.getEquipmentCost(g);
       if (cash < cost) continue;
       if (ns.gang.purchaseEquipment(m, g)) {
         ns.print(`${getTS()}[GEAR] 📦 ${m} purchased ${g}`);
+      }
+    }
+    
+    // Buy vehicles with cost limit
+    for (const v of VEHICLES) {
+      if (info.upgrades.includes(v) || info.augmentations.includes(v)) continue;
+      if (v === "Ford Flex V20" && info.agi >= 20) continue;
+      if (v === "ATX1070 Superbike" && info.agi >= 50) continue;
+      if (v === "Mercedes-Benz S9001" && info.agi >= 100) continue;
+      if (v === "White Ferrari" && info.agi >= 150) continue;
+
+      const cost = ns.gang.getEquipmentCost(v);
+      if (cost > cash * 0.3) continue;
+      if (ns.gang.purchaseEquipment(m, v)) {
+        ns.print(`${getTS()}[VEHICLE] 🚗 ${m} purchased ${v}`);
       }
     }
   };
@@ -134,9 +182,14 @@ export async function main(ns) {
   const tryAscend = (m) => {
     const r = ns.gang.getAscensionResult(m);
     if (!r) return false;
-    if (r.str >= ASCENSION_THRESHOLD || r.def >= ASCENSION_THRESHOLD || r.dex >= ASCENSION_THRESHOLD || r.agi >= ASCENSION_THRESHOLD) {
+    
+    const info = ns.gang.getMemberInformation(m);
+    const threshold = getDynamicAscensionThreshold(info);
+    
+    if (r.str >= threshold || r.def >= threshold || r.dex >= threshold || r.agi >= threshold) {
       if (ns.gang.ascendMember(m)) {
-        ns.print(`${getTS()}[ASCEND] ✨ ${m} (S:${r.str?.toFixed(2)} D:${r.def?.toFixed(2)} X:${r.dex?.toFixed(2)} A:${r.agi?.toFixed(2)})`);
+        const mult = Math.max(info.str_asc_mult, info.def_asc_mult, info.dex_asc_mult, info.agi_asc_mult).toFixed(1);
+        ns.print(`${getTS()}[ASCEND] ✨ ${m} (${mult}x mult, ${threshold}x threshold) (S:${r.str?.toFixed(2)} D:${r.def?.toFixed(2)} X:${r.dex?.toFixed(2)} A:${r.agi?.toFixed(2)})`);
         return true;
       }
     }
@@ -146,7 +199,7 @@ export async function main(ns) {
   const assignBestMoney = (m) => {
     const info = ns.gang.getMemberInformation(m);
     let best = null;
-    let bestScore = -1;
+    let bestMoney = -1;
     const gang = ns.gang.getGangInformation();
     
     for (const t of ns.gang.getTaskNames()) {
@@ -155,11 +208,9 @@ export async function main(ns) {
       
       const statValue = (info.str * s.strWeight + info.def * s.defWeight + info.dex * s.dexWeight + info.agi * s.agiWeight + info.cha * s.chaWeight) / 100;
       const money = s.baseMoney * statValue * gang.wantedPenalty;
-      const wanted = Math.max(s.baseWanted, 0.001);
-      const score = money / wanted;
       
-      if (score > bestScore) {
-        bestScore = score;
+      if (money > bestMoney) {
+        bestMoney = money;
         best = t;
       }
     }
@@ -198,10 +249,18 @@ export async function main(ns) {
       case State.BOOTSTRAP:
         members.forEach(m => {
           tryAscend(m);
-          assign(m, TRAIN_TASK);
+          const info = ns.gang.getMemberInformation(m);
+          if (needsCharismaTraining(info)) {
+            assign(m, "Train Charisma");
+          } else {
+            assign(m, TRAIN_TASK);
+          }
           buyGear(m);
         });
-        if (members.every(m => getLowestCombatStat(ns.gang.getMemberInformation(m)) >= 50)) {
+        if (members.every(m => {
+          const info = ns.gang.getMemberInformation(m);
+          return getLowestCombatStat(info) >= 50 && info.cha >= CHA_THRESHOLD;
+        })) {
           enter(State.GROWTH);
         }
         break;
@@ -214,12 +273,17 @@ export async function main(ns) {
           const info = ns.gang.getMemberInformation(m);
           buyGear(m);
           
-          const lowestStat = getLowestCombatStat(info);
-          if (lowestStat < STR_THRESHOLD) {
-            assign(m, TRAIN_TASK);
+          if (needsCharismaTraining(info)) {
+            assign(m, "Train Charisma");
             growthReady = false;
           } else {
-            assign(m, RESPECT_TASK);
+            const lowestStat = getLowestCombatStat(info);
+            if (lowestStat < STR_THRESHOLD) {
+              assign(m, TRAIN_TASK);
+              growthReady = false;
+            } else {
+              assign(m, RESPECT_TASK);
+            }
           }
         });
         if (anyAscGrowth) enter(State.RESET);
@@ -237,8 +301,11 @@ export async function main(ns) {
         
         members.forEach((m, i) => {
           buyGear(m);
-          if (i < RESPECT_SLOTS) {
-            const info = ns.gang.getMemberInformation(m);
+          const info = ns.gang.getMemberInformation(m);
+          
+          if (needsCharismaTraining(info)) {
+            assign(m, "Train Charisma");
+          } else if (i < RESPECT_SLOTS) {
             const lowestStat = getLowestCombatStat(info);
             if (lowestStat < STR_THRESHOLD) {
               assign(m, TRAIN_TASK);
@@ -251,8 +318,9 @@ export async function main(ns) {
         });
 
         let goToReduction = true;
-        if (gang.wantedPenalty < WANTED_PENALTY_MIN) {
-          ns.print(`${getTS()}[TRANSITION] 🟡 Reason: Efficiency dropped below ${WANTED_PENALTY_MIN * 100}%`);
+        const currentWantedMin = getDynamicWantedMin(members.length);
+        if (gang.wantedPenalty < currentWantedMin) {
+          ns.print(`${getTS()}[TRANSITION] 🟡 Reason: Efficiency dropped below ${(currentWantedMin * 100).toFixed(0)}%`);
         } else if (moneySaturated()) {
           ns.print(`${getTS()}[TRANSITION] 💸 Reason: Money growth saturated`);
         } else if (failsafe()) {
