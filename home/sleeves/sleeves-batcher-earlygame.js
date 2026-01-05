@@ -1,7 +1,7 @@
-/** * SLEEVE ORCHESTRATOR - v1.9.19
+/** * SLEEVE ORCHESTRATOR - v1.9.23
  * DESCRIPTION:
  * Orchestrates sleeve activities using externalized scripts in /sleeves/.
- * FIX: Simplified numSleeves logic to use number type directly.
+ * FIX: Fixed crime detection using task.crimeType and enabled automatic crime upgrades.
  * 
  * PORT USAGE:
  * - Port 9: Receives JSON from hacknet-total-production.js with {totalProd: number}
@@ -100,18 +100,18 @@ export async function main(ns) {
   const exec = (script, ...args) => {
     const pid = ns.run(script, 1, ...args);
     if (pid === 0) {
-      ns.print(`!!! ERROR: Exec failed for ${script} !!!`);
+      ns.print(`❌ Exec failed for ${script}`);
     }
   };
 
-  ns.tprint("Sleeve Orchestrator v1.9.19 Online. 🤖");
+  ns.tprint("Sleeve Orchestrator v1.9.23 Online. 🤖");
 
   while (true) {
     const numSleeves = await callNumSleeves(10, SCRIPT_GET_NUM_SLEEVES);
     const hacknetData = await callHacknet(9, SCRIPT_HACKNET_PROD);
 
     if (numSleeves === null) {
-      ns.print("!!! ERROR: numSleeves is NULL. Check Port 10 and getNumSleeves.js !!!");
+      ns.print("❌ numSleeves is NULL. Check Port 10 and getNumSleeves.js");
       await ns.sleep(10000);
       continue;
     }
@@ -129,7 +129,7 @@ export async function main(ns) {
       const data = await callSleeveData(10, SCRIPT_GET_SLEEVE_DATA, i);
 
       if (!data || !data.stats) {
-        ns.print(`!!! ERROR: Failed to retrieve data for Sleeve ${i} !!!`);
+        ns.print(`❌ Failed to retrieve data for Sleeve ${i}`);
         continue;
       }
 
@@ -156,8 +156,8 @@ export async function main(ns) {
         } else {
           if (task.gymStatType) {
             currentTaskName = task.gymStatType;
-          } else if (task.crime) {
-            currentTaskName = task.crime;
+          } else if (task.crimeType) {
+            currentTaskName = task.crimeType;
           } else {
             currentTaskName = task.type;
           }
@@ -179,9 +179,6 @@ export async function main(ns) {
 
       const neededBudget = (trainingSleevesCount + 1) * 2500;
 
-      ns.print(`DEBUG Sleeve ${i}: targetStat=${targetStat}, currentTaskName=${currentTaskName}`);
-      ns.print(`DEBUG Sleeve ${i}: Raw Task Object: ${JSON.stringify(task)}`);
-
       if (stats.shock > 0) {
         if (!task || task.type !== "RECOVERY") {
           ns.print(`Sleeve ${i}: Transitioning to Recovery.`);
@@ -189,18 +186,17 @@ export async function main(ns) {
         }
       } else if (stats.sync < 100) {
         if (!task || task.type !== "SYNCHRONIZE") {
-          ns.print(`Sleeve ${i}: Transitioning to Sync.`);
+          ns.print(`🔄 Sleeve ${i}: Transitioning to Sync.`);
           exec(SCRIPT_SET_SYNC, i);
         }
       } else if (targetStat && totalHacknetProd >= neededBudget) {
         if (currentTaskName !== targetStat) {
-          ns.print(`Sleeve ${i}: Training ${targetStat} at Powerhouse Gym. 🏋️`);
+          ns.print(`🏋️ Sleeve ${i}: Training ${targetStat} at Powerhouse Gym`);
           exec(SCRIPT_SET_GYM, i, "Powerhouse Gym", targetStat);
-          ns.print(`Sleeve ${i}: Set to Gym Training.`);
         }
         trainingSleevesCount++;
       } else if (targetStat && totalHacknetProd < neededBudget) {
-        ns.print(`Sleeve ${i}: Insufficient budget for Gym.`);
+        ns.print(`🟡 Sleeve ${i}: Insufficient budget for Gym ($${ns.formatNumber(neededBudget)} needed)`);
       } else {
         const combatAvg = (str + def + dex + agi) / 4;
         let targetCrime;
@@ -212,8 +208,8 @@ export async function main(ns) {
           targetCrime = "Shoplift";
         }
 
-        if (!task || task.crime !== targetCrime) {
-          ns.print(`Sleeve ${i}: Upgrading crime -> ${targetCrime}`);
+        if (!task || task.type !== "CRIME" || task.crimeType !== targetCrime) {
+          ns.print(`🔪 Sleeve ${i}: Upgrading crime ${task?.crimeType || 'none'} -> ${targetCrime}`);
           exec(SCRIPT_SET_CRIME, i, targetCrime);
         }
       }

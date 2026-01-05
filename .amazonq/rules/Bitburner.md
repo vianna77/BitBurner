@@ -48,6 +48,9 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 - **✅ Success messages**: Use for successful operations, completions, or positive outcomes
 - **🟡 Warnings & attention**: Use for warnings, degraded states, or "pay attention" messages
 - **🔶 Failed operations**: Use for failed attempts that didn't crash - unsuccessful but recoverable
+- **🏋️ Gym training**: Use for sleeve gym training activities
+- **🔪 Crime activities**: Use for sleeve crime assignments
+- **🤖 Sleeves**: Use for referencing sleeves or sleeve-related operations
 
 ### 9. Port Communication Documentation
 - **Document port usage**: If the code uses writePort or readPort, add comments at the beginning of the file explaining:
