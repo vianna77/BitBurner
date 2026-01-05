@@ -42,3 +42,9 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 ### 7. Response Language
 - **Respond in user's language**: Always respond in the language used in the prompt (Portuguese in this case)
 - **Code follows English rule**: Keep code under the English-only rules above
+
+### 8. Emoji Usage Standards
+- **❌ Error messages**: Use for critical errors, crashes, or blocking issues
+- **✅ Success messages**: Use for successful operations, completions, or positive outcomes
+- **🟡 Warnings & attention**: Use for warnings, degraded states, or "pay attention" messages
+- **🔶 Failed operations**: Use for failed attempts that didn't crash - unsuccessful but recoverable

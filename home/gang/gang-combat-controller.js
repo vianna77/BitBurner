@@ -224,19 +224,18 @@ export async function main(ns) {
   const hasEnoughReputation = (gang) => {
     try {
       const faction = gang.faction;
-      const availableAugs = ns.singularity.getAugmentationsFromFaction(faction);
       
-      let maxRepRequired = 0;
-      for (const aug of availableAugs) {
-        const repReq = ns.singularity.getAugmentationRepReq(aug);
-        if (repReq > maxRepRequired) {
-          maxRepRequired = repReq;
-        }
-      }
+      // Check faction reputation, not gang respect
+      const factionRep = ns.singularity.getFactionRep(faction);
+      const LATE_GAME_THRESHOLD = 2500000; // 2.5m faction reputation
       
-      return gang.respect >= maxRepRequired;
+      const result = factionRep >= LATE_GAME_THRESHOLD;
+      ns.print(`${getTS()}[DEBUG] 🔍 Faction: ${faction}, Late Game Threshold: ${ns.formatNumber(LATE_GAME_THRESHOLD)}, Current Faction Rep: ${ns.formatNumber(factionRep)}, Gang Respect: ${ns.formatNumber(gang.respect)}, Result: ${result}`);
+      
+      return result;
     } catch (e) {
-      return false; // Fallback if singularity functions not available
+      ns.print(`${getTS()}[DEBUG] ⚠️ hasEnoughReputation error: ${e.message}`);
+      return false;
     }
   };
 
@@ -319,8 +318,12 @@ export async function main(ns) {
         });
         
         const hasMaxRep = hasEnoughReputation(gang);
+        ns.print(`${getTS()}[DEBUG] 🔍 hasMaxRep: ${hasMaxRep}, gang.respect: ${ns.formatNumber(gang.respect)}, gang.faction: ${gang.faction}`);
+        
         if (hasMaxRep) {
           ns.print(`${getTS()}[STRATEGY] 💰 Late Game Mode: Max reputation achieved, focusing on money generation`);
+        } else {
+          ns.print(`${getTS()}[STRATEGY] 📈 Early/Mid Game Mode: Building reputation and stats`);
         }
         
         members.forEach((m, i) => {
@@ -330,12 +333,8 @@ export async function main(ns) {
           if (needsCharismaTraining(info)) {
             assign(m, "Train Charisma");
           } else if (hasMaxRep) {
-            // Late game: focus on money with wanted control
-            if (i === 0 && gang.wantedLevel > 1) {
-              assign(m, WANTED_TASK); // Only 1 member for wanted control when needed
-            } else {
-              assign(m, "Traffick Illegal Arms"); // Rest focus on money
-            }
+            // Late game: start with everyone on money
+            assign(m, "Traffick Illegal Arms");
           } else {
             // Early/mid game: current strategy
             if (i < RESPECT_SLOTS) {
@@ -350,6 +349,34 @@ export async function main(ns) {
             }
           }
         });
+
+        // Dynamic wanted control for late game
+        if (hasMaxRep) {
+          const currentWanted = gang.wantedLevelGainRate;
+          ns.print(`${getTS()}[DEBUG] 🔍 Wanted Growth Rate: ${currentWanted.toFixed(6)}/sec`);
+          
+          if (currentWanted > 0) {
+            // Find weakest member and assign to wanted control
+            let weakestMember = null;
+            let weakestAvg = Infinity;
+            
+            for (const m of members) {
+              const info = ns.gang.getMemberInformation(m);
+              if (info.task === WANTED_TASK) continue;
+              
+              const avg = (info.str + info.def + info.dex + info.agi) / 4;
+              if (avg < weakestAvg) {
+                weakestAvg = avg;
+                weakestMember = m;
+              }
+            }
+            
+            if (weakestMember) {
+              assign(weakestMember, WANTED_TASK);
+              ns.print(`${getTS()}[WANTED] 👮 ${weakestMember} (avg: ${weakestAvg.toFixed(1)}) assigned to wanted control`);
+            }
+          }
+        }
 
         let goToReduction = true;
         const currentWantedMin = getDynamicWantedMin(members.length);
