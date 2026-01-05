@@ -1,6 +1,6 @@
 /**
  * Smart Batch - RAM Optimized HWGW
- * Version 1.2 - ENHANCED PREP
+ * Version 1.4 - EXACT CALCULATIONS
  * 
  * Features:
  * - Automatic server preparation (security + money)
@@ -8,8 +8,8 @@
  * - RAM-aware thread calculation with fallbacks
  * - Binary search for maximum RAM utilization
  * - HWGW batch execution with timing
- * - Percentage-based success tolerance (20% security, 99% money)
- * - Comprehensive debug logging
+ * - Exact calculations using shadow objects
+ * - Official security constants (0.002/0.004/0.05)
  * 
  * @param {NS} ns
  */
@@ -45,6 +45,13 @@ export async function main(ns) {
     return;
   }
 
+  // Check if player can hack the target
+  const targetServer = ns.getServer(target);
+  if (targetServer.requiredHackingSkill > ns.getHackingLevel()) {
+    ns.tprint(`${t()} ❌ Insufficient hacking level: need ${targetServer.requiredHackingSkill}, have ${ns.getHackingLevel()}`);
+    return;
+  }
+
   if (!ns.fileExists("Formulas.exe", "home")) {
     ns.tprint(`${t()} ❌ Missing Formulas.exe`);
     return;
@@ -65,12 +72,24 @@ export async function main(ns) {
   const growRam = ns.getScriptRam(GROW_PATH);
   const hackRam = ns.getScriptRam(HACK_PATH);
 
+  // Shadow object helpers for consistent calculations
+  const shadowServer = (base, money, security) => ({
+    ...base,
+    moneyAvailable: money,
+    hackDifficulty: security
+  });
+  
+  const shadowPlayer = (base, hackLevel) => ({
+    ...base,
+    skills: {
+      ...base.skills,
+      hacking: hackLevel
+    }
+  });
+
   // State machine
   const STATE = { PREP: "PREP", BATCH: "BATCH" };
   let currentState = STATE.PREP;
-  let batchFailureCount = 0; // Track consecutive failures
-  const EXTRA_THREADS_PER_FAILURE = 5; // Threads to add per failure
-  let stealRatio = 0.25; // Steal 25% of money
 
   // Main loop
   while (true) {
@@ -112,7 +131,7 @@ export async function main(ns) {
 
           // Calculate grow needs (limited by remaining RAM)
           const ramLeftAfterWeaken = freeRam - weakenRamUsed;
-          const growIdeal = Math.ceil(ns.formulas.hacking.growThreads(server, player, server.moneyMax));
+          const growIdeal = Math.ceil(ns.formulas.hacking.growThreads(server, player, server.moneyMax)); // Exact calculation
           const maxGrowThreads = Math.floor(ramLeftAfterWeaken / growRam);
           const growThreads = Math.min(growIdeal, maxGrowThreads);
           const growRamUsed = growThreads * growRam;
@@ -164,7 +183,7 @@ export async function main(ns) {
 
           // Calculate optimal threads needed to reach max money
           const formulaResult = ns.formulas.hacking.growThreads(server, player, server.moneyMax);
-          const optimalGrowThreads = Math.ceil(formulaResult);
+          const optimalGrowThreads = Math.ceil(formulaResult); // Exact calculation
           const maxGrowThreads = Math.floor(freeRam / growRam);
           const growThreads = Math.min(optimalGrowThreads, maxGrowThreads);
 
@@ -193,7 +212,14 @@ export async function main(ns) {
         }
 
         // Find maximum steal ratio that fits in available RAM
-        const hackPercent = ns.formulas.hacking.hackPercent(server, player);
+        const realServer = ns.getServer(target);
+        const realPlayer = ns.getPlayer();
+        
+        // Create optimal shadow objects for calculations
+        const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+        const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+        
+        const hackPercent = ns.formulas.hacking.hackPercent(optimalServer, optimalPlayer);
         let maxStealRatio = 0.95; // Start with 95% steal ratio
         let bestBatch = null;
 
@@ -205,14 +231,15 @@ export async function main(ns) {
           const testRatio = (minRatio + maxRatio) / 2;
           const testHackThreads = Math.max(1, Math.floor(testRatio / hackPercent));
 
-          const moneyAfterHack = server.moneyAvailable * (1 - (testHackThreads * hackPercent));
-          const testGrowThreads = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads({
-            ...server,
-            moneyAvailable: moneyAfterHack
-          }, player, server.moneyMax)));
+          const moneyAfterHack = optimalServer.moneyAvailable * (1 - (testHackThreads * hackPercent));
+          const testServerAfterHack = shadowServer(optimalServer, moneyAfterHack, optimalServer.hackDifficulty);
+          
+          const testGrowThreads = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(
+            testServerAfterHack, optimalPlayer, optimalServer.moneyMax
+          ))); // Exact calculation
 
-          const testWeakenHack = Math.max(1, Math.ceil((testHackThreads * 0.002) / 0.05));
-          const testWeakenGrow = Math.max(1, Math.ceil((testGrowThreads * 0.004) / 0.05));
+          const testWeakenHack = Math.max(1, Math.ceil((testHackThreads * 0.002) / 0.05)); // Exact calculation
+          const testWeakenGrow = Math.max(1, Math.ceil((testGrowThreads * 0.004) / 0.05)); // Exact calculation
 
           const testTotalRam = (testHackThreads * hackRam) + (testGrowThreads * growRam) +
             (testWeakenHack * weakenRam) + (testWeakenGrow * weakenRam);
@@ -240,53 +267,31 @@ export async function main(ns) {
 
         const { hackThreads, growThreads, weakenThreadsHack, weakenThreadsGrow, totalRam, stealRatio: finalStealRatio } = bestBatch;
 
-        // Add extra threads based on previous failures
-        const extraThreads = batchFailureCount * EXTRA_THREADS_PER_FAILURE;
-        const adjustedGrowThreads = growThreads + extraThreads;
-        const adjustedWeakenHack = weakenThreadsHack + extraThreads;
-        const adjustedWeakenGrow = weakenThreadsGrow + extraThreads;
-        
-        // Check if adjusted batch fits in RAM
-        const adjustedTotalRam = (hackThreads * hackRam) + (adjustedGrowThreads * growRam) + 
-                                (adjustedWeakenHack * weakenRam) + (adjustedWeakenGrow * weakenRam);
-        
-        const finalGrowThreads = adjustedTotalRam <= freeRam ? adjustedGrowThreads : growThreads;
-        const finalWeakenHack = adjustedTotalRam <= freeRam ? adjustedWeakenHack : weakenThreadsHack;
-        const finalWeakenGrow = adjustedTotalRam <= freeRam ? adjustedWeakenGrow : weakenThreadsGrow;
-        
-        if (extraThreads > 0 && adjustedTotalRam <= freeRam) {
-          ns.print(`${t()} 🔧 CORRECTION: Adding ${extraThreads} extra threads (failure #${batchFailureCount})`);
-          ns.print(`${t()} 🟡 INFO: Repeated success with failure #${batchFailureCount} indicates optimal correction level found - this is expected behavior`);
-        } else if (extraThreads > 0) {
-          ns.print(`${t()} 🔶 CORRECTION FAILED: Cannot fit corrected batch in RAM`);
-          ns.print(`${t()} 📊 Needed: G=${adjustedGrowThreads}(+${extraThreads}) W1=${adjustedWeakenHack}(+${extraThreads}) W2=${adjustedWeakenGrow}(+${extraThreads}) = ${ns.formatRam(adjustedTotalRam)}`);
-          ns.print(`${t()} 📊 Available: ${ns.formatRam(freeRam)} (${ns.formatRam(adjustedTotalRam - freeRam)} over limit)`);
-        }
-
         ns.print(`${t()} 📊 Optimized batch: Steal=${(finalStealRatio * 100).toFixed(1)}% RAM=${ns.formatRam(totalRam)}/${ns.formatRam(freeRam)} (${((totalRam / freeRam) * 100).toFixed(1)}%)`);
 
-        // Calculate timing
-        const hackTime = ns.formulas.hacking.hackTime(server, player);
-        const growTime = ns.formulas.hacking.growTime(server, player);
-        const weakenTime = ns.formulas.hacking.weakenTime(server, player);
+        // Calculate timing using optimal server state
+        const hackTime = ns.formulas.hacking.hackTime(optimalServer, optimalPlayer);
+        const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
+        const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
 
         const now = Date.now();
-        const hackStart = now + weakenTime - hackTime - 20;
-        const weaken1Start = now + weakenTime - 10;
-        const growStart = now + weakenTime - growTime + 10;
-        const weaken2Start = now + 20;
+        const buffer = 50; // Increased timing buffer
+        const hackStart = now + weakenTime - hackTime - buffer;
+        const weaken1Start = now + weakenTime - (buffer / 2);
+        const growStart = now + weakenTime - growTime + (buffer / 2);
+        const weaken2Start = now + buffer;
 
-        ns.print(`${t()} 🚀 Executing batch: H=${hackThreads} W=${finalWeakenHack} G=${finalGrowThreads} W=${finalWeakenGrow} (${ns.formatRam(adjustedTotalRam <= freeRam ? adjustedTotalRam : totalRam)})`);
+        ns.print(`${t()} 🚀 Executing batch: H=${hackThreads} W=${weakenThreadsHack} G=${growThreads} W=${weakenThreadsGrow} (${ns.formatRam(totalRam)})`);
 
         // Execute HWGW
         ns.print(`${t()} 📍 EXEC LOCATION: BATCH-HACK (${hackThreads} threads)`);
         ns.exec(HACK_PATH, thisServer, hackThreads, target, hackStart);
-        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-WEAKEN-1 (${finalWeakenHack} threads)`);
-        ns.exec(WEAKEN_PATH, thisServer, finalWeakenHack, target, weaken1Start);
-        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-GROW (${finalGrowThreads} threads)`);
-        ns.exec(GROW_PATH, thisServer, finalGrowThreads, target, growStart);
-        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-WEAKEN-2 (${finalWeakenGrow} threads)`);
-        ns.exec(WEAKEN_PATH, thisServer, finalWeakenGrow, target, weaken2Start);
+        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-WEAKEN-1 (${weakenThreadsHack} threads)`);
+        ns.exec(WEAKEN_PATH, thisServer, weakenThreadsHack, target, weaken1Start);
+        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-GROW (${growThreads} threads)`);
+        ns.exec(GROW_PATH, thisServer, growThreads, target, growStart);
+        ns.print(`${t()} 📍 EXEC LOCATION: BATCH-WEAKEN-2 (${weakenThreadsGrow} threads)`);
+        ns.exec(WEAKEN_PATH, thisServer, weakenThreadsGrow, target, weaken2Start);
 
         // Wait for batch to complete, then check results
         const batchDuration = Math.max(hackTime, growTime, weakenTime) + 500; // +500ms buffer
@@ -312,13 +317,12 @@ export async function main(ns) {
 
         ns.print(`${t()} 📊 BATCH RESULT: Security=${postBatchServer.hackDifficulty.toFixed(2)}/${postBatchServer.minDifficulty.toFixed(2)} (+${securityDiff.toFixed(2)}, +${securityPercent.toFixed(1)}%) | Money=${ns.formatNumber(postBatchServer.moneyAvailable)}/${ns.formatNumber(postBatchServer.moneyMax)} (${moneyPercent.toFixed(1)}%)`);
 
-        if (securityPercent <= 20 && moneyPercent >= 99) {
+        if (securityPercent <= 20 && moneyPercent >= 95) {
           ns.print(`${t()} ✅ HWGW SUCCESS: Server maintained optimal state!`);
-          // Keep batchFailureCount to maintain correction level
         } else {
-          batchFailureCount++; // Increment failure count
-          ns.print(`${t()} 🟡 HWGW ISSUE: Server state not optimal after batch (failure #${batchFailureCount})`);
-          ns.print(`${t()} 🔧 NEXT BATCH: Will add ${batchFailureCount * EXTRA_THREADS_PER_FAILURE} extra threads to G/W operations`);
+          ns.print(`${t()} 🟡 HWGW ISSUE: Server state not optimal after batch`);
+          ns.print(`${t()} 🔄 Returning to PREP mode to restore server state`);
+          currentState = STATE.PREP;
         }
         break;
     }
