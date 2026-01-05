@@ -32,7 +32,7 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 - **Ask for documentation**: When in doubt about available methods, request the API file instead of guessing
 - **Official API Reference**: https://github.com/bitburner-official/bitburner-src/blob/stable/markdown/bitburner.ns.md
 
-## Communication and Language Rules
+## Documentation Rules
 
 ### 6. Script Language Requirements
 - **English only in scripts**: All text inside scripts (logs, messages, variables) must be in English
@@ -48,3 +48,15 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 - **✅ Success messages**: Use for successful operations, completions, or positive outcomes
 - **🟡 Warnings & attention**: Use for warnings, degraded states, or "pay attention" messages
 - **🔶 Failed operations**: Use for failed attempts that didn't crash - unsuccessful but recoverable
+
+### 9. Port Communication Documentation
+- **Document port usage**: If the code uses writePort or readPort, add comments at the beginning of the file explaining:
+  - Which port numbers are used
+  - What values/formats are passed through each port
+  - How the ports are used in the communication flow
+
+### 10. External File Usage Documentation
+- **Document exec dependencies**: If external files are used with exec(), add comments in the file header explaining:
+  - Which external files are executed
+  - The reason for using each external file
+  - What functionality each external script provides
