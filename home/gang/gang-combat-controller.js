@@ -1,11 +1,22 @@
 /** @param {NS} ns */
 export async function main(ns) {
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "gang/gang-combat-controller.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: gang-combat-controller.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
   // ============================================================
   // CONFIGURATION
   // ============================================================
-  
+
   const PURCHASE_PORT = 3;
-  
+
   // Combat-specific thresholds
   const STR_THRESHOLD = 100;
   const CHA_THRESHOLD = 10;
@@ -15,14 +26,14 @@ export async function main(ns) {
     if (maxMultiplier < 100) return 1.4;  // Mid game: balanced growth
     return 1.3;                           // Late game: incremental gains
   };
-  
+
   // Combat Tasks
   const TRAIN_TASK = "Train Combat";
   const RESPECT_TASK = "Territory Warfare";
   const MONEY_TASK = "Human Trafficking";
   const WANTED_TASK = "Vigilante Justice";
   const TERRORISM_TASK = "Terrorism";
-  
+
   // Timing
   const FAILSAFE_MAX_PHASE_TIME = 30 * 60 * 1000;
   const MONEY_TREND_WINDOW = 10;
@@ -33,7 +44,7 @@ export async function main(ns) {
     return 0.85;                         // Small gang: conservative
   };
   const RESPECT_SLOTS = 6;
-  
+
   // Combat Equipment
   const GEAR = [
     "Baseball Bat", "Katana", "Glock 18C", "P90C", "Steyr AUG", "AK-47", "M15A10 Assault Rifle", "AWM Sniper Rifle",
@@ -43,7 +54,7 @@ export async function main(ns) {
 
   const VEHICLES = [
     "Ford Flex V20", "ATX1070 Superbike", "Mercedes-Benz S9001", "White Ferrari"
-  ];  
+  ];
 
   // ============================================================
   // STATE MACHINE
@@ -51,7 +62,7 @@ export async function main(ns) {
 
   const State = {
     BOOTSTRAP: "BOOTSTRAP",
-    GROWTH: "GROWTH", 
+    GROWTH: "GROWTH",
     PRODUCTION: "PRODUCTION",
     REDUCTION: "REDUCTION",
     RESET: "RESET"
@@ -83,7 +94,7 @@ export async function main(ns) {
     const canBuy = ns.peek(PURCHASE_PORT) !== "DISABLE";
     const memberCount = ns.gang.getMemberNames().length;
     const minEff = (getDynamicWantedMin(memberCount) * 100).toFixed(0);
-    
+
     if (force || Math.abs(parseFloat(currEff) - lastLoggedEfficiency) >= 0.5) {
       ns.print(`${getTS()}[STATUS] 📊 ${state} | $${ns.formatNumber(gang.moneyGainRate)}/s | Eff: ${currEff}%/${minEff}% | Buy: ${canBuy ? "✅" : "🛑"}`);
       if (!canBuy) ns.toast("Combat Gang: Global Purchases are DISABLED (Port 3)", "warning", 120000);
@@ -152,7 +163,7 @@ export async function main(ns) {
     if (ns.peek(PURCHASE_PORT) === "DISABLE") return;
     const info = ns.gang.getMemberInformation(m);
     const cash = ns.getServerMoneyAvailable("home");
-    
+
     // Buy regular gear first
     for (const g of GEAR) {
       if (info.upgrades.includes(g) || info.augmentations.includes(g)) continue;
@@ -162,7 +173,7 @@ export async function main(ns) {
         ns.print(`${getTS()}[GEAR] 📦 ${m} purchased ${g}`);
       }
     }
-    
+
     // Buy vehicles with cost limit
     for (const v of VEHICLES) {
       if (info.upgrades.includes(v) || info.augmentations.includes(v)) continue;
@@ -182,10 +193,10 @@ export async function main(ns) {
   const tryAscend = (m) => {
     const r = ns.gang.getAscensionResult(m);
     if (!r) return false;
-    
+
     const info = ns.gang.getMemberInformation(m);
     const threshold = getDynamicAscensionThreshold(info);
-    
+
     if (r.str >= threshold || r.def >= threshold || r.dex >= threshold || r.agi >= threshold) {
       if (ns.gang.ascendMember(m)) {
         const mult = Math.max(info.str_asc_mult, info.def_asc_mult, info.dex_asc_mult, info.agi_asc_mult).toFixed(1);
@@ -201,14 +212,14 @@ export async function main(ns) {
     let best = null;
     let bestMoney = -1;
     const gang = ns.gang.getGangInformation();
-    
+
     for (const t of ns.gang.getTaskNames()) {
       const s = ns.gang.getTaskStats(t);
       if (s.baseMoney <= 0) continue;
-      
+
       const statValue = (info.str * s.strWeight + info.def * s.defWeight + info.dex * s.dexWeight + info.agi * s.agiWeight + info.cha * s.chaWeight) / 100;
       const money = s.baseMoney * statValue * gang.wantedPenalty;
-      
+
       if (money > bestMoney) {
         bestMoney = money;
         best = t;
@@ -224,14 +235,14 @@ export async function main(ns) {
   const hasEnoughReputation = (gang) => {
     try {
       const faction = gang.faction;
-      
+
       // Check faction reputation, not gang respect
       const factionRep = ns.singularity.getFactionRep(faction);
       const LATE_GAME_THRESHOLD = 2500000; // 2.5m faction reputation
-      
+
       const result = factionRep >= LATE_GAME_THRESHOLD;
       ns.print(`${getTS()}[DEBUG] 🔍 Faction: ${faction}, Late Game Threshold: ${ns.formatNumber(LATE_GAME_THRESHOLD)}, Current Faction Rep: ${ns.formatNumber(factionRep)}, Gang Respect: ${ns.formatNumber(gang.respect)}, Result: ${result}`);
-      
+
       return result;
     } catch (e) {
       ns.print(`${getTS()}[DEBUG] ⚠️ hasEnoughReputation error: ${e.message}`);
@@ -290,7 +301,7 @@ export async function main(ns) {
           if (tryAscend(m)) anyAscGrowth = true;
           const info = ns.gang.getMemberInformation(m);
           buyGear(m);
-          
+
           if (needsCharismaTraining(info)) {
             assign(m, "Train Charisma");
             growthReady = false;
@@ -316,20 +327,20 @@ export async function main(ns) {
           const avgB = (infoB.str + infoB.def + infoB.dex + infoB.agi) / 4;
           return avgB - avgA;
         });
-        
+
         const hasMaxRep = hasEnoughReputation(gang);
         ns.print(`${getTS()}[DEBUG] 🔍 hasMaxRep: ${hasMaxRep}, gang.respect: ${ns.formatNumber(gang.respect)}, gang.faction: ${gang.faction}`);
-        
+
         if (hasMaxRep) {
           ns.print(`${getTS()}[STRATEGY] 💰 Late Game Mode: Max reputation achieved, focusing on money generation`);
         } else {
           ns.print(`${getTS()}[STRATEGY] 📈 Early/Mid Game Mode: Building reputation and stats`);
         }
-        
+
         members.forEach((m, i) => {
           buyGear(m);
           const info = ns.gang.getMemberInformation(m);
-          
+
           if (needsCharismaTraining(info)) {
             assign(m, "Train Charisma");
           } else if (hasMaxRep) {
@@ -354,23 +365,23 @@ export async function main(ns) {
         if (hasMaxRep) {
           const currentWanted = gang.wantedLevelGainRate;
           ns.print(`${getTS()}[DEBUG] 🔍 Wanted Growth Rate: ${currentWanted.toFixed(6)}/sec`);
-          
+
           if (currentWanted > 0) {
             // Find weakest member and assign to wanted control
             let weakestMember = null;
             let weakestAvg = Infinity;
-            
+
             for (const m of members) {
               const info = ns.gang.getMemberInformation(m);
               if (info.task === WANTED_TASK) continue;
-              
+
               const avg = (info.str + info.def + info.dex + info.agi) / 4;
               if (avg < weakestAvg) {
                 weakestAvg = avg;
                 weakestMember = m;
               }
             }
-            
+
             if (weakestMember) {
               assign(weakestMember, WANTED_TASK);
               ns.print(`${getTS()}[WANTED] 👮 ${weakestMember} (avg: ${weakestAvg.toFixed(1)}) assigned to wanted control`);

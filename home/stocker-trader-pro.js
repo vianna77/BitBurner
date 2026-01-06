@@ -17,6 +17,18 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "stocker-trader-pro.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: stocker-trader-pro.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   // ============================================================
   // 1) PARAMETER VALIDATION
   // ============================================================
@@ -28,7 +40,27 @@ export async function main(ns) {
     return;
   }
 
-  const MAX_CAP = Number(ns.args[0]);
+  // Parse money value with multipliers (k, m, b, t, q)
+  function parseMoneyValue(value) {
+    if (typeof value === 'number') return value;
+
+    const str = String(value).toLowerCase();
+    const lastChar = str.slice(-1);
+    const numStr = str.slice(0, -1);
+    const numValue = parseFloat(numStr);
+
+    ns.tprint(`🔍 DEBUG parseMoneyValue: input="${value}" | str="${str}" | lastChar="${lastChar}" | numStr="${numStr}" | numValue=${numValue}`);
+
+    if (lastChar === 'k') return numValue * 1e3;
+    if (lastChar === 'm') return numValue * 1e6;
+    if (lastChar === 'b') return numValue * 1e9;
+    if (lastChar === 't') return numValue * 1e12;
+    if (lastChar === 'q') return numValue * 1e15;
+
+    return parseFloat(str);
+  }
+
+  const MAX_CAP = parseMoneyValue(ns.args[0]);
   const ENABLE_SHORT = ns.args[1] === true || ns.args[1] === "true";
   const AGGRESSION = Number(ns.args[2]);
 
@@ -52,7 +84,7 @@ export async function main(ns) {
   // 2) AGGRESSION MAPPING
   // ============================================================
 
-  const BUY_THRESHOLD = 0.72 - AGGRESSION * 0.12; 
+  const BUY_THRESHOLD = 0.72 - AGGRESSION * 0.12;
   const SELL_THRESHOLD = 0.55 - AGGRESSION * 0.08;
   const SHORT_THRESHOLD = 0.30 + AGGRESSION * 0.10;
 
@@ -180,7 +212,7 @@ export async function main(ns) {
 
       if (stockData.pos.l > 0 && forecast < SELL_THRESHOLD) {
         const sellPrice = ns.stock.sellStock(stockData.sym, stockData.pos.l);
-        
+
         if (sellPrice > 0) {
           const actualAmount = sellPrice * stockData.pos.l;
           const profit = (sellPrice - stockData.pos.lAvg) * stockData.pos.l;
@@ -194,7 +226,7 @@ export async function main(ns) {
 
       if (ENABLE_SHORT && stockData.pos.s > 0 && forecast > SELL_THRESHOLD) {
         const coverPrice = ns.stock.sellShort(stockData.sym, stockData.pos.s);
-        
+
         if (coverPrice > 0) {
           const actualProfit = (stockData.pos.sAvg - coverPrice) * stockData.pos.s;
           const totalReturn = stockData.pos.sAvg * stockData.pos.s + actualProfit;
@@ -232,17 +264,17 @@ export async function main(ns) {
           const availableShares = maxShares - currentPos;
           const calculatedShares = Math.floor(allocation / price);
           const shares = Math.min(calculatedShares, availableShares);
-          
+
           // DEBUG: Log detailed buy attempt info
           ns.print(`🔍 DEBUG ${candidate.sym}: Price=$${price.toFixed(2)} | Allocation=${ns.formatNumber(allocation)} | Calculated=${calculatedShares} | Max=${maxShares} | Available=${availableShares} | Final=${shares}`);
-          
+
           if (shares <= 0) {
             actions.push(`⚠️ SKIP ${candidate.sym} | No shares available (Max: ${maxShares}, Current: ${currentPos})`);
             continue;
           }
 
           const buyPrice = ns.stock.buyStock(candidate.sym, shares);
-          
+
           if (buyPrice > 0) {
             const actualCost = buyPrice * shares;
             actions.push(`✅ BUY ${candidate.sym} | Shares: ${shares} | Price: $${buyPrice.toFixed(2)} | Cost: ${ns.formatNumber(actualCost)} | Weight: ${(weight * 100).toFixed(1)}%`);
@@ -256,7 +288,7 @@ export async function main(ns) {
     // ---------- LOG ----------
     const currentCash = cash();
     const unrealizedPnL = symbols.reduce((accumulator, symbol) => accumulator + unrealized(symbol), 0);
-    
+
     // Calculates total money spent out of pocket (cost basis)
     const totalSpent = symbols.reduce((accumulator, symbol) => {
       const position = getPosition(symbol);
@@ -274,13 +306,13 @@ export async function main(ns) {
 
     ns.print("=================================================");
     ns.print(`🎯 [REGIME] ${regime} | Cycle: ${Math.floor(Date.now() / CYCLE_TIME) % 1000}`);
-    
+
     if (actions.length > 0) {
       actions.forEach(a => ns.print(a));
     } else {
       ns.print(`💤 No actions taken this cycle`);
     }
-    
+
     ns.print(`📊 [MARKET] Active Positions: ${activePositions} | Exposure: ${(params.exposure * 100).toFixed(1)}% | Max: ${params.maxPos}`);
     ns.print(`💰 [CASH] Available: ${ns.formatNumber(currentCash)} | Invested: ${ns.formatNumber(totalSpent)} / ${ns.formatNumber(MAX_CAP)}`);
     ns.print(`📈 [P&L] Unrealized: ${unrealizedPnL >= 0 ? '+' : ''}${ns.formatNumber(unrealizedPnL)} (${roiPercent >= 0 ? '+' : ''}${roiPercent.toFixed(2)}%) | Portfolio: ${ns.formatNumber(totalPortfolio)}`);

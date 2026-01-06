@@ -18,20 +18,19 @@
 
 /** @param {NS} ns */
 export async function main(ns) {
-  // --- CHECK FOR DUPLICATE PROCESS ---
-  const currentScriptName = ns.getScriptName();
-  const currentPid = ns.pid;
-  const runningProcesses = ns.ps("home"); // Ou ns.getHostname() se rodar em outros servers
-
-  const isDuplicate = runningProcesses.some(p =>
-    p.filename === currentScriptName && p.pid !== currentPid
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "moneyManager.js" && p.pid !== ns.pid
   );
 
-  if (isDuplicate) {
-    ns.toast(`Script ${currentScriptName} is already running! Terminating new instance.`, "error", 30000);
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: moneyManager.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
     return;
   }
 
+  // --- CHECK FOR DUPLICATE PROCESS ---
   ns.disableLog("ALL");
   ns.ui.openTail();
   const bgBlueWhite = "\u001b[44;37m"; // Fundo Azul (44), Texto Branco (37)

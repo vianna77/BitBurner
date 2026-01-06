@@ -6,6 +6,18 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "go/go-claude.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: go-claude.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   const opponent = await ns.prompt("Choose the opponent:", {
     type: "select",
     choices: [
@@ -27,7 +39,7 @@ export async function main(ns) {
 
     const char = board[x][y];
     let liberties = new Set();
-    const neighbors = [[x-1, y], [x+1, y], [x, y-1], [x, y+1]];
+    const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
 
     for (const [nx, ny] of neighbors) {
       if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) {
@@ -44,10 +56,10 @@ export async function main(ns) {
 
   // Eye Detection - More restrictive (V6.0 improvement)
   function isEye(board, x, y, color) {
-    const neighbors = [[x-1, y], [x+1, y], [x, y-1], [x, y+1]];
+    const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
     let friendlyCount = 0;
     let edgeCount = 0;
-    
+
     for (const [nx, ny] of neighbors) {
       if (nx < 0 || nx >= 5 || ny < 0 || ny >= 5) {
         edgeCount++;
@@ -57,7 +69,7 @@ export async function main(ns) {
         return false;
       }
     }
-    
+
     return (friendlyCount + edgeCount) >= 4;
   }
 
@@ -65,31 +77,31 @@ export async function main(ns) {
   function wouldBeSuicide(board, x, y) {
     const testBoard = board.map(row => [...row]);
     testBoard[x][y] = 'X';
-    
+
     // Check if the move itself has liberties
     const libs = getLiberties(testBoard, x, y);
     if (libs.size > 0) return false;
-    
+
     // Check if the move captures any enemy group (NOT suicide)
-    const neighbors = [[x-1, y], [x+1, y], [x, y-1], [x, y+1]];
+    const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
     for (const [nx, ny] of neighbors) {
       if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && board[nx][ny] === 'O') {
         const enemyLibs = getLiberties(testBoard, nx, ny);
         if (enemyLibs.size === 0) return false;
       }
     }
-    
+
     return true;
   }
 
   // Advanced Influence Evaluation (V6.0)
   function evaluatePosition(board, x, y) {
     let score = 0;
-    
+
     // Strategic positions on 5x5
     if (x === 2 && y === 2) score += 100; // Center
     else if ((x === 1 || x === 3) && (y === 1 || y === 3)) score += 60; // Stars
-    
+
     // Influence mapping
     const reach = 2;
     for (let dx = -reach; dx <= reach; dx++) {
@@ -98,7 +110,7 @@ export async function main(ns) {
         if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5) {
           const dist = Math.abs(dx) + Math.abs(dy);
           if (dist === 0) continue;
-          
+
           if (board[nx][ny] === 'X') {
             score += (40 / dist); // Support
           } else if (board[nx][ny] === 'O') {
@@ -109,7 +121,7 @@ export async function main(ns) {
         }
       }
     }
-    
+
     return score;
   }
 
@@ -182,7 +194,7 @@ export async function main(ns) {
       // 4. STRATEGIC EXPANSION (V6.0 Influence-based)
       if (x_move === undefined) {
         let potentialMoves = [];
-        
+
         for (let x = 0; x < 5; x++) {
           for (let y = 0; y < 5; y++) {
             if (validMoves[x][y] && !isEye(board, x, y, 'X') && !wouldBeSuicide(board, x, y)) {
@@ -191,7 +203,7 @@ export async function main(ns) {
             }
           }
         }
-        
+
         if (potentialMoves.length > 0) {
           potentialMoves.sort((a, b) => b.score - a.score);
           x_move = potentialMoves[0].x;
@@ -214,7 +226,7 @@ export async function main(ns) {
         const gameState = ns.go.getGameState();
         const whiteScore = gameState.whiteScore;
         const blackScore = gameState.blackScore;
-        
+
         if (blackScore > whiteScore) {
           ns.print(`[STRATEGY] Opponent passed. Black: ${blackScore} > White: ${whiteScore}. Passing to win.`);
           result = await ns.go.passTurn();
@@ -243,10 +255,13 @@ export async function main(ns) {
     const avgDuration = (elapsedSec / totalMatches).toFixed(2);
     const wlRatio = totalLosses === 0 ? totalWins.toFixed(2) : (totalWins / totalLosses).toFixed(2);
 
-    if (blackScore > whiteScore) {
-      ns.toast(`🏆 WIN (${totalWins}W / ${totalLosses}L) ⏳ ${avgDuration}s/avg ⚖️ ${wlRatio} W/L`, "success", 7000);
-    } else {
-      ns.toast(`💀 LOSS (${totalWins}W / ${totalLosses}L) ⏳ ${avgDuration}s/avg ⚖️ ${wlRatio} W/L`, "error", 7000);
+    // Show toast only every 10th match
+    if (totalMatches % 10 === 0) {
+      if (blackScore > whiteScore) {
+        ns.toast(`🏆 WIN - Match #${totalMatches} (${totalWins}W / ${totalLosses}L) ⏳ ${avgDuration}s/avg ⚖️ ${wlRatio} W/L`, "success", 7000);
+      } else {
+        ns.toast(`💀 LOSS - Match #${totalMatches} (${totalWins}W / ${totalLosses}L) ⏳ ${avgDuration}s/avg ⚖️ ${wlRatio} W/L`, "error", 7000);
+      }
     }
 
     await ns.sleep(50);

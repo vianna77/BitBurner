@@ -29,6 +29,18 @@ const SCRIPT_HACKNET_PROD = "hacknet/hacknet-total-production.js";
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p => 
+    p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
+  );
+  
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   ns.clearPort(10);
 
   const callNumSleeves = async (port, script) => {

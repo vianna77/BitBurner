@@ -5,7 +5,19 @@
  */
 export async function main(ns) {
   ns.disableLog("ALL");
-  
+
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "contracts/contract-daemon.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: contract-finder-daemon.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   while (true) {
     const visited = new Set();
     const queue = ["home"];
