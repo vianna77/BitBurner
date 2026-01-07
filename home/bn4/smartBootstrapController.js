@@ -89,30 +89,30 @@ export async function main(ns) {
   ];
 
   const TARGET_AUGMENTS = [
-    { faction: "Chongqing", name: "Speech Enhancement", price: 625000, rep: 1250 },
-    { faction: "CyberSec", name: "Neurotrainer I", price: 4000000, rep: 1000 },
-    { faction: "CyberSec", name: "Synaptic Enhancement Implant", price: 7500000, rep: 2000 },
-    { faction: "Tian Di Hui", name: "Social Negotiation Assistant (S.N.A)", price: 8000000, rep: 6250 },
-    { faction: "CyberSec", name: "BitWire", price: 10000000, rep: 3750 },
-    { faction: "NiteSec", name: "Embedded Netburner Module", price: 15000000, rep: 15000 },
-    { faction: "Chongqing", name: "Nuoptimal Nootropic Injector Implant", price: 20000000, rep: 5000 },
-    { faction: "NiteSec", name: "Neurotrainer II", price: 45000000, rep: 10000 },
-    { faction: "Tian Di Hui", name: "ADR-V1 Pheromone Gene", price: 45000000, rep: 3750 },
-    { faction: "Chongqing", name: "Speech Processor Implant", price: 50000000, rep: 7500 },
-    { faction: "NiteSec", name: "Cranial Signal Processors - Gen I", price: 70000000, rep: 1250 },
-    { faction: "NiteSec", name: "Artificial Synaptic Potentiation", price: 80000000, rep: 6250 },
-    { faction: "NiteSec", name: "Cranial Signal Processors - Gen II", price: 125000000, rep: 10000 },
-    { faction: "NiteSec", name: "CRTX42-AA Gene Modification", price: 225000000, rep: 45000 },
-    { faction: "NiteSec", name: "Neural-Retention Enhancement", price: 250000000, rep: 20000 },
-    { faction: "Chongqing", name: "Neuregen Gene Modification", price: 375000000, rep: 37500 },
-    { faction: "The Black Hand", name: "Cranial Signal Processors - Gen III", price: 550000000, rep: 50000 },
-    { faction: "Tian Di Hui", name: "Neuroreceptor Management Implant", price: 550000000, rep: 75000 },
-    { faction: "The Black Hand", name: "The Black Hand", price: 550000000, rep: 100000 },
-    { faction: "BitRunners", name: "Enhanced Myelin Sheathing", price: 1375000000, rep: 100000 },
-    { faction: "BitRunners", name: "DataJack", price: 450000000, rep: 112500 },
-    { faction: "BitRunners", name: "Cranial Signal Processors - Gen IV", price: 1100000000, rep: 125000 },
-    { faction: "BitRunners", name: "Embedded Netburner Module Core Implant", price: 2500000000, rep: 175000 },
-    { faction: "BitRunners", name: "Neural Accelerator", price: 1750000000, rep: 200000 }
+    { faction: "Chongqing", name: "Speech Enhancement" },
+    { faction: "CyberSec", name: "Neurotrainer I" },
+    { faction: "CyberSec", name: "Synaptic Enhancement Implant" },
+    { faction: "Tian Di Hui", name: "Social Negotiation Assistant (S.N.A)" },
+    { faction: "CyberSec", name: "BitWire" },
+    { faction: "NiteSec", name: "Embedded Netburner Module" },
+    { faction: "Chongqing", name: "Nuoptimal Nootropic Injector Implant" },
+    { faction: "NiteSec", name: "Neurotrainer II" },
+    { faction: "Tian Di Hui", name: "ADR-V1 Pheromone Gene" },
+    { faction: "Chongqing", name: "Speech Processor Implant" },
+    { faction: "NiteSec", name: "Cranial Signal Processors - Gen I" },
+    { faction: "NiteSec", name: "Artificial Synaptic Potentiation" },
+    { faction: "NiteSec", name: "Cranial Signal Processors - Gen II" },
+    { faction: "NiteSec", name: "CRTX42-AA Gene Modification" },
+    { faction: "NiteSec", name: "Neural-Retention Enhancement" },
+    { faction: "Chongqing", name: "Neuregen Gene Modification" },
+    { faction: "The Black Hand", name: "Cranial Signal Processors - Gen III" },
+    { faction: "Tian Di Hui", name: "Neuroreceptor Management Implant" },
+    { faction: "The Black Hand", name: "The Black Hand" },
+    { faction: "BitRunners", name: "Enhanced Myelin Sheathing" },
+    { faction: "BitRunners", name: "DataJack" },
+    { faction: "BitRunners", name: "Cranial Signal Processors - Gen IV" },
+    { faction: "BitRunners", name: "Embedded Netburner Module Core Implant" },
+    { faction: "BitRunners", name: "Neural Accelerator" }
   ];
 
   const FACTION_REQS = {
@@ -142,12 +142,24 @@ export async function main(ns) {
     return;
   }
   
-  ns.print(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAug.price)} Rep | Req: ${ns.formatNumber(targetAug.rep)} Rep`);
-  ns.tprint(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAug.price)} Rep | Req: ${ns.formatNumber(targetAug.rep)} Rep`);
+  const targetAugPrice = ns.singularity.getAugmentationPrice(targetAug.name);
+  const targetAugRep = ns.singularity.getAugmentationRepReq(targetAug.name);
+  
+  ns.print(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAugPrice)} | Rep: ${ns.formatNumber(targetAugRep)}`);
+  ns.tprint(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAugPrice)} | Rep: ${ns.formatNumber(targetAugRep)}`);
 
   let state = STATE.WARMUP;
   let lastLoggedState = "";
   let torRouterPurchased = false;
+
+  // Shadow player function
+  const shadowPlayer = (base, hackLevel) => ({
+    ...base,
+    skills: {
+      ...base.skills,
+      hacking: hackLevel
+    }
+  });
 
   // =========================
   // HELPER FUNCTIONS
@@ -230,10 +242,8 @@ export async function main(ns) {
 
     const player = ns.getPlayer();
     if (player.factions.includes(target.faction)) {
-      const price = ns.singularity.getAugmentationPrice(target.name);
       const rep = ns.singularity.getFactionRep(target.faction);
-
-      if (ns.getServerMoneyAvailable("home") >= price && rep >= target.rep) {
+      if (ns.getServerMoneyAvailable("home") >= targetAugPrice && rep >= targetAugRep) {
         if (ns.singularity.purchaseAugmentation(target.faction, target.name)) {
           ns.print(`${t()} ✅ [AUGMENT] Purchased ${target.name} from ${target.faction}. Installing...`);
           ns.singularity.installAugmentations(BOOTSTRAP_SCRIPT);
@@ -277,6 +287,18 @@ export async function main(ns) {
   // =========================
   // BOOTSTRAP
   // =========================
+  // Start contract daemon
+  if (!ns.isRunning("contracts/contract-daemon.js", "home")) {
+    ns.exec("contracts/contract-daemon.js", "home", 1);
+    ns.print(`${t()} [BOOTSTRAP] Started contract daemon`);
+  }
+  
+  // Start IPvGO bot
+  if (!ns.isRunning("go/go-claude.js", "home")) {
+    ns.exec("go/go-claude.js", "home", 1, "Slum Snakes");
+    ns.print(`${t()} [BOOTSTRAP] Started IPvGO bot against Slum Snakes`);
+  }
+  
   if (ns.getServerMaxRam("home") >= 4) {
     if (!ns.fileExists("share.js", "home")) {
       // share.js not found
@@ -290,7 +312,11 @@ export async function main(ns) {
   // =========================
   while (true) {
     const money = ns.getServerMoneyAvailable("home");
-    const player = ns.getPlayer();
+    const realPlayer = ns.getPlayer();
+    const hackingLevel = ns.getHackingLevel();
+    const currentWork = ns.singularity.getCurrentWork();
+    
+    const player = shadowPlayer(realPlayer, hackingLevel);
 
     if (targetAug) {
       const invitations = ns.singularity.checkFactionInvitations();
@@ -318,18 +344,16 @@ export async function main(ns) {
           break;
         }
 
-        const work = ns.singularity.getCurrentWork();
-
         if (money >= MIN_WARMUP_MONEY && needsStats) {
           const statToTrain = GYM_STATS.find(s => player.skills[s] < TARGET_STATS[s]);
-          if (!work || work.type !== "GYM" || work.gymStat?.toLowerCase() !== statToTrain) {
+          if (!currentWork || currentWork.type !== "GYM" || currentWork.gymStat?.toLowerCase() !== statToTrain) {
             ns.exec(STOP_ACTION_SCRIPT, "home", 1);
             ns.exec(GYM_WORKOUT_SCRIPT, "home", 1, GYM, statToTrain, true);
             ns.print(`${t()} 🏋️ [WARMUP] Training ${statToTrain}. Sleeping ${GYM_SESSION_TIME / 1000}s.`);
             await ns.sleep(GYM_SESSION_TIME);
           }
         } else {
-          if (!work || work.type !== "CRIME") {
+          if (!currentWork || currentWork.type !== "CRIME") {
             ns.exec(STOP_ACTION_SCRIPT, "home", 1);
             ns.exec(COMMIT_CRIMES_SCRIPT, "home", 1, SHOPLIFT, true);
             ns.print(`${t()} 🔪 [WARMUP FUNDING] Farming money for stats or travel.`);
@@ -367,8 +391,7 @@ export async function main(ns) {
           bestCrime = LARCENY;
         }
 
-        const work = ns.singularity.getCurrentWork();
-        if (!work || work.type !== "CRIME" || (work.type === "CRIME" && work.crimeType !== bestCrime)) {
+        if (!currentWork || currentWork.type !== "CRIME" || (currentWork.type === "CRIME" && currentWork.crimeType !== bestCrime)) {
           ns.exec(STOP_ACTION_SCRIPT, "home", 1);
           ns.exec(COMMIT_CRIMES_SCRIPT, "home", 1, bestCrime, true);
           ns.print(`${t()} 🔪 [CRIME] Committing ${bestCrime} (Chance: ${Math.round(ns.singularity.getCrimeChance(bestCrime) * 100)}%)`);
@@ -397,7 +420,7 @@ export async function main(ns) {
             break;
           }
 
-          if (reqs.hack && ns.getHackingLevel() < reqs.hack) {
+          if (reqs.hack && hackingLevel < reqs.hack) {
             ns.print(`${t()} [STATE TRANSITION] PREP_FACTION -> STUDY_HACK. Reason: Hacking Level < ${reqs.hack}.`);
             state = STATE.STUDY_HACK;
             break;
@@ -411,10 +434,10 @@ export async function main(ns) {
             const portsOwned = PORT_PROGRAMS.filter(progName => ns.fileExists(progName, "home")).length;
             const portsReq = ns.getServerNumPortsRequired(reqs.backdoor);
 
-            if (ns.getHackingLevel() >= ns.getServerRequiredHackingLevel(reqs.backdoor) && portsOwned >= portsReq) {
+            if (hackingLevel >= ns.getServerRequiredHackingLevel(reqs.backdoor) && portsOwned >= portsReq) {
               await installBackdoor(reqs.backdoor);
             } else {
-              if (ns.getHackingLevel() < ns.getServerRequiredHackingLevel(reqs.backdoor)) {
+              if (hackingLevel < ns.getServerRequiredHackingLevel(reqs.backdoor)) {
                 ns.print(`${t()} [STATE TRANSITION] PREP_FACTION -> STUDY_HACK. Reason: Need more hacking level.`);
                 state = STATE.STUDY_HACK;
                 break;
@@ -441,8 +464,7 @@ export async function main(ns) {
 
         travelTo(TARGET_CITY);
 
-        const work = ns.singularity.getCurrentWork();
-        if (!work || work.type !== "CLASS") {
+        if (!currentWork || currentWork.type !== "CLASS") {
           ns.exec(STOP_ACTION_SCRIPT, "home", 1);
           ns.exec(UNIVERSITY_COURSE_SCRIPT, "home", 1, UNIVERSITY, COURSE, true);
           ns.print(`${t()} [STUDY] Studying Algorithms at ${UNIVERSITY}`);
@@ -464,17 +486,17 @@ export async function main(ns) {
           }
         }
 
-        if (ns.getHackingLevel() >= targetLevel) {
+        if (hackingLevel >= targetLevel) {
           ns.print(`${t()} [STATE TRANSITION] STUDY_HACK -> NETWORK_ATTACK. Reason: Target level ${targetLevel} reached.`);
           state = STATE.NETWORK_ATTACK;
         } else {
-          ns.print(`${t()} [STUDY] Current: ${ns.getHackingLevel()} / Target: ${targetLevel}. Continuing...`);
+          ns.print(`${t()} [STUDY] Current: ${hackingLevel} / Target: ${targetLevel}. Continuing...`);
         }
         break;
       }
 
       case STATE.NETWORK_ATTACK: {
-        const currentHackLvl = ns.getHackingLevel();
+        const currentHackLvl = hackingLevel;
         const visited = new Set(["home"]);
         const stack = ["home"];
         const servers = [];
@@ -558,14 +580,13 @@ export async function main(ns) {
         }
 
         const currentRep = ns.singularity.getFactionRep(targetAug.faction);
-        if (currentRep >= targetAug.rep) {
+        if (currentRep >= targetAugRep) {
           ns.print(`${t()} [STATE TRANSITION] FACTION_WORK -> CRIME. Reason: Target Rep reached (${ns.formatNumber(currentRep)}).`);
           state = STATE.CRIME;
           break;
         }
 
-        const work = ns.singularity.getCurrentWork();
-        if (!work || work.type !== "FACTION" || work.factionName !== targetAug.faction) {
+        if (!currentWork || currentWork.type !== "FACTION" || currentWork.factionName !== targetAug.faction) {
           ns.exec(STOP_ACTION_SCRIPT, "home", 1);
           ns.exec(FACTION_WORK_SCRIPT, "home", 1, targetAug.faction, "Hacking Contracts", true);
           ns.print(`${t()} [FACTION] Working for ${targetAug.faction} to acquire ${targetAug.name}`);
