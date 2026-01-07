@@ -1,12 +1,14 @@
-/** * SLEEVE ORCHESTRATOR - v1.9.23
+/**
+ * VERSION: 1.9.24
+ * SLEEVE ORCHESTRATOR
+ * 
  * DESCRIPTION:
  * Orchestrates sleeve activities using externalized scripts in /sleeves/.
- * FIX: Fixed crime detection using task.crimeType and enabled automatic crime upgrades.
- * 
+ * Uses player's actual money for gym budget instead of hacknet production.
+ *
  * PORT USAGE:
- * - Port 9: Receives JSON from hacknet-total-production.js with {totalProd: number}
  * - Port 10: Receives JSON from getNumSleeves.js (number) and getSleeveData.js ({stats, task})
- * 
+ *
  * EXTERNAL FILES:
  * - /sleeves/getNumSleeves.js: Returns total number of sleeves available
  * - /sleeves/getSleeveData.js: Returns sleeve stats and current task for specific sleeve index
@@ -14,7 +16,6 @@
  * - /sleeves/setToSync.js: Sets sleeve to synchronization mode
  * - /sleeves/setToCrime.js: Assigns crime activity to sleeve
  * - /sleeves/setToGym.js: Assigns gym training to sleeve for specific stat
- * - hacknet/hacknet-total-production.js: Returns total hacknet production for budget calculations
  */
 
 const SCRIPT_GET_NUM_SLEEVES = "/sleeves/getNumSleeves.js";
@@ -30,10 +31,10 @@ export async function main(ns) {
   ns.disableLog("ALL");
 
   // Check if script is already running
-  const runningProcesses = ns.ps("home").filter(p => 
+  const runningProcesses = ns.ps("home").filter(p =>
     p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
   );
-  
+
   if (runningProcesses.length > 0) {
     ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running on home server!");
     ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
@@ -116,23 +117,16 @@ export async function main(ns) {
     }
   };
 
-  ns.tprint("Sleeve Orchestrator v1.9.23 Online. 🤖");
+  ns.tprint("Sleeve Orchestrator v1.9.24 Online. 🤖");
 
   while (true) {
     const numSleeves = await callNumSleeves(10, SCRIPT_GET_NUM_SLEEVES);
-    const hacknetData = await callHacknet(9, SCRIPT_HACKNET_PROD);
+    const playerMoney = ns.getServerMoneyAvailable("home");
 
     if (numSleeves === null) {
       ns.print("❌ numSleeves is NULL. Check Port 10 and getNumSleeves.js");
       await ns.sleep(10000);
       continue;
-    }
-
-    let totalHacknetProd;
-    if (hacknetData) {
-      totalHacknetProd = hacknetData.totalProd;
-    } else {
-      totalHacknetProd = 0;
     }
 
     let trainingSleevesCount = 0;
@@ -201,13 +195,13 @@ export async function main(ns) {
           ns.print(`🔄 Sleeve ${i}: Transitioning to Sync.`);
           exec(SCRIPT_SET_SYNC, i);
         }
-      } else if (targetStat && totalHacknetProd >= neededBudget) {
+      } else if (targetStat && playerMoney >= neededBudget) {
         if (currentTaskName !== targetStat) {
           ns.print(`🏋️ Sleeve ${i}: Training ${targetStat} at Powerhouse Gym`);
           exec(SCRIPT_SET_GYM, i, "Powerhouse Gym", targetStat);
         }
         trainingSleevesCount++;
-      } else if (targetStat && totalHacknetProd < neededBudget) {
+      } else if (targetStat && playerMoney < neededBudget) {
         ns.print(`🟡 Sleeve ${i}: Insufficient budget for Gym ($${ns.formatNumber(neededBudget)} needed)`);
       } else {
         const combatAvg = (str + def + dex + agi) / 4;

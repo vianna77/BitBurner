@@ -89,7 +89,7 @@ export async function main(ns) {
   ];
 
   const TARGET_AUGMENTS = [
-    { faction: "Chongqing", name: "Speech Enhancement" },
+    { faction: "Tian Di Hui", name: "Speech Enhancement" },
     { faction: "CyberSec", name: "Neurotrainer I" },
     { faction: "CyberSec", name: "Synaptic Enhancement Implant" },
     { faction: "Tian Di Hui", name: "Social Negotiation Assistant (S.N.A)" },
@@ -284,6 +284,8 @@ export async function main(ns) {
     }
   }
 
+  //list ; contractDaemon ; sleeveBatcherEG ; goFarm "Slum Snakes" ;
+
   // =========================
   // BOOTSTRAP
   // =========================
@@ -297,6 +299,12 @@ export async function main(ns) {
   if (!ns.isRunning("go/go-claude.js", "home")) {
     ns.exec("go/go-claude.js", "home", 1, "Slum Snakes");
     ns.print(`${t()} [BOOTSTRAP] Started IPvGO bot against Slum Snakes`);
+  }
+
+  // Start sleeves batcher
+  if (!ns.isRunning("/sleeves/sleeves-batcher-earlygame.js", "home")) {
+    ns.exec("/sleeves/sleeves-batcher-earlygame.js", "home", 1);
+    ns.print(`${t()} [BOOTSTRAP] Started sleeves batcher earlygame`);
   }
 
   if (ns.getServerMaxRam("home") >= 4) {

@@ -1,7 +1,21 @@
 {
-    "bitburner.authToken": "sjLQp30KE5dOxFL15kLn1QYhmMiMe7tnh2v5ecA0c/GcmNiUCZQ8kAP9zYRt/SPc",
-    "bitburner.showFileWatcherEnabledNotification": true,
-    "bitburner.showPushSuccessNotification": true,
-    "bitburner.scriptRoot": "./home",
-    "bitburner.fileWatcher.enable": true
+  "bitburner.authToken": "sjLQp30KE5dOxFL15kLn1QYhmMiMe7tnh2v5ecA0c/GcmNiUCZQ8kAP9zYRt/SPc",
+  "bitburner.showFileWatcherEnabledNotification": true,
+  "bitburner.showPushSuccessNotification": true,
+  "bitburner.scriptRoot": "./home",
+  "bitburner.fileWatcher.enable": true,
+  "files.trimTrailingWhitespace": true,
+  "files.trimFinalNewlines": true,
+  "files.insertFinalNewline": true,
+  "editor.formatOnSave": true,
+  "editor.detectIndentation": false,
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": true,
+    "source.organizeImports": true
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }
