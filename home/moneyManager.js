@@ -3,16 +3,16 @@
  * Monitors and displays real-time performance statistics for all income sources.
  * Tracks hack earnings from servers and stock trading profits with detailed analytics.
  * FIX: Added debug logging to troubleshoot stock trading data reception.
- * 
+ *
  * PORT USAGE:
  * - Port 1: Reads JSON {source: string, amount: number} from hack scripts and stock trader
- * 
+ *
  * FEATURES:
  * - Real-time income tracking per source
  * - Average earnings per hack and per second calculations
  * - Duplicate process prevention
  * - Sorted display by earnings per second
- * 
+ *
  * USAGE: run moneyManager.js
  */
 
@@ -30,12 +30,11 @@ export async function main(ns) {
     return;
   }
 
-  // --- CHECK FOR DUPLICATE PROCESS ---
   ns.disableLog("ALL");
   ns.ui.openTail();
-  const bgBlueWhite = "\u001b[44;37m"; // Fundo Azul (44), Texto Branco (37)
+  const bgBlueWhite = "\u001b[44;37m";
 
-  const serverStats = {}; // Stores { total: n, count: n, last: n, firstSeen: ms }
+  const serverStats = {};
   const startTime = Date.now();
 
   while (true) {
@@ -44,7 +43,6 @@ export async function main(ns) {
     while (portData !== "NULL PORT DATA") {
       const { source, amount } = portData;
 
-      // Inicializa na primeira chamada do servidor específico
       if (!serverStats[source]) {
         serverStats[source] = {
           total: 0,
@@ -61,37 +59,44 @@ export async function main(ns) {
       portData = ns.readPort(1);
     }
 
-    // Exibe o log se houver qualquer dado registrado para atualizar AVG/SEC em tempo real
     if (Object.keys(serverStats).length > 0) {
-      ns.clearLog();
-      ns.print(`--- INDIVIDUAL SERVER PERFORMANCE ---`);
-      ns.print(`Runtime: ${ns.tFormat(Date.now() - startTime)}`);
-      ns.print(`------------------------------------------------------------------------------------------------------------`);
-      ns.print(`${bgBlueWhite}${"SERVER".padEnd(40)} | ${"LAST".padEnd(10)} | ${"AVG/HACK".padEnd(10)} | ${"AVG/SEC".padEnd(10)} | ${"TOTAL".padEnd(12)} | COUNT`);
-      ns.print(`------------------------------------------------------------------------------------------------------------`);
-
-      const sortedEntries = Object.entries(serverStats).sort(([, a], [, b]) => {
-        const now = Date.now();
-        const avgSecA = a.total / ((now - a.firstSeen) / 1000 || 1);
-        const avgSecB = b.total / ((now - b.firstSeen) / 1000 || 1);
-        return avgSecA - avgSecB;
-      });
-
-      for (const [name, stats] of sortedEntries) {
-        const now = Date.now();
-        const avgPerHack = stats.total / stats.count;
-        const elapsedServerSec = (now - stats.firstSeen) / 1000;
-        const avgPerSec = stats.total / (elapsedServerSec || 1);
-
-        ns.print(
-          `${name.padEnd(40)} | ` +
-          `${ns.formatNumber(stats.last).padEnd(10)} | ` +
-          `${ns.formatNumber(avgPerHack).padEnd(10)} | ` +
-          `${ns.formatNumber(avgPerSec).padEnd(10)} | ` +
-          `$${ns.formatNumber(stats.total).padEnd(11)} | ${stats.count}`
-        );
-      }
+      displayStats(ns, serverStats, startTime, bgBlueWhite);
     }
     await ns.sleep(1000);
   }
+}
+
+function displayStats(ns, serverStats, startTime, bgBlueWhite) {
+  ns.clearLog();
+  ns.print(`--- INDIVIDUAL SERVER PERFORMANCE ---`);
+  ns.print(`Runtime: ${ns.tFormat(Date.now() - startTime)}`);
+  ns.print(`------------------------------------------------------------------------------------------------------------`);
+  ns.print(`${bgBlueWhite}${"SERVER".padEnd(40)} | ${"LAST".padEnd(10)} | ${"AVG/HACK".padEnd(10)} | ${"AVG/SEC".padEnd(10)} | ${"TOTAL".padEnd(12)} | COUNT`);
+  ns.print(`------------------------------------------------------------------------------------------------------------`);
+
+  const sortedEntries = getSortedEntries(serverStats);
+
+  for (const [name, stats] of sortedEntries) {
+    const now = Date.now();
+    const avgPerHack = stats.total / stats.count;
+    const elapsedServerSec = (now - stats.firstSeen) / 1000;
+    const avgPerSec = stats.total / (elapsedServerSec || 1);
+
+    ns.print(
+      `${name.padEnd(40)} | ` +
+      `${ns.formatNumber(stats.last).padEnd(10)} | ` +
+      `${ns.formatNumber(avgPerHack).padEnd(10)} | ` +
+      `${ns.formatNumber(avgPerSec).padEnd(10)} | ` +
+      `$${ns.formatNumber(stats.total).padEnd(11)} | ${stats.count}`
+    );
+  }
+}
+
+function getSortedEntries(serverStats) {
+  return Object.entries(serverStats).sort(([, a], [, b]) => {
+    const now = Date.now();
+    const avgSecA = a.total / ((now - a.firstSeen) / 1000 || 1);
+    const avgSecB = b.total / ((now - b.firstSeen) / 1000 || 1);
+    return avgSecA - avgSecB;
+  });
 }

@@ -1,8 +1,12 @@
 /**
- * Smart Batch - RAM Optimized HWGW
- * Version 1.4 - EXACT CALCULATIONS
- * 
- * Features:
+ * VERSION: 1.4.0
+ * SMART BATCH WITH FORMULA - RAM OPTIMIZED HWGW
+ *
+ * DESCRIPTION:
+ * Advanced HWGW batching system with automatic server preparation,
+ * smart COMBO mode, RAM-aware calculations, and exact formula-based timing.
+ *
+ * FEATURES:
  * - Automatic server preparation (security + money)
  * - Smart COMBO mode (weaken + grow simultaneously)
  * - RAM-aware thread calculation with fallbacks
@@ -10,8 +14,10 @@
  * - HWGW batch execution with timing
  * - Exact calculations using shadow objects
  * - Official security constants (0.002/0.004/0.05)
- * 
- * @param {NS} ns
+ *
+ * USAGE:
+ * run smartBatchWithFormulaQ.js [target]
+ * - target: Server hostname to hack
  */
 export function autocomplete(data, args) {
   if (args.length === 1) {
@@ -78,7 +84,7 @@ export async function main(ns) {
     moneyAvailable: money,
     hackDifficulty: security
   });
-  
+
   const shadowPlayer = (base, hackLevel) => ({
     ...base,
     skills: {
@@ -214,11 +220,11 @@ export async function main(ns) {
         // Find maximum steal ratio that fits in available RAM
         const realServer = ns.getServer(target);
         const realPlayer = ns.getPlayer();
-        
+
         // Create optimal shadow objects for calculations
         const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
         const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-        
+
         const hackPercent = ns.formulas.hacking.hackPercent(optimalServer, optimalPlayer);
         let maxStealRatio = 0.95; // Start with 95% steal ratio
         let bestBatch = null;
@@ -233,7 +239,7 @@ export async function main(ns) {
 
           const moneyAfterHack = optimalServer.moneyAvailable * (1 - (testHackThreads * hackPercent));
           const testServerAfterHack = shadowServer(optimalServer, moneyAfterHack, optimalServer.hackDifficulty);
-          
+
           const testGrowThreads = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(
             testServerAfterHack, optimalPlayer, optimalServer.moneyMax
           ))); // Exact calculation

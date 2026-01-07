@@ -134,6 +134,7 @@ export async function main(ns) {
     FACTION_WORK: "FACTION_WORK"
   };
 
+  // amazonq-ignore-next-line
   const ownedAugs = ns.singularity.getOwnedAugmentations(true);
   const targetAug = TARGET_AUGMENTS.find(aug => !ownedAugs.includes(aug.name));
 

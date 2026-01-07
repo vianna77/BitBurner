@@ -1,7 +1,7 @@
 /**
  * VERSION: 1.9.24
  * SLEEVE ORCHESTRATOR
- * 
+ *
  * DESCRIPTION:
  * Orchestrates sleeve activities using externalized scripts in /sleeves/.
  * Uses player's actual money for gym budget instead of hacknet production.
@@ -24,7 +24,6 @@ const SCRIPT_SET_RECOVERY = "/sleeves/setToRecovery.js";
 const SCRIPT_SET_SYNC = "/sleeves/setToSync.js";
 const SCRIPT_SET_CRIME = "/sleeves/setToCrime.js";
 const SCRIPT_SET_GYM = "/sleeves/setToGym.js";
-const SCRIPT_HACKNET_PROD = "hacknet/hacknet-total-production.js";
 
 /** @param {NS} ns */
 export async function main(ns) {
