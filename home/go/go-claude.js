@@ -1,5 +1,6 @@
+// VERSION 6.0.0
 /** 
- * IPvGO Strategy Bot V5.0 - Optimized for 5x5 Combat
+ * IPvGO Strategy Bot - Optimized for 5x5 Combat
  * Enhanced tactical AI with aggressive capture and defense priorities
  * @param {NS} ns 
  */
@@ -18,17 +19,21 @@ export async function main(ns) {
     return;
   }
 
-  const opponent = await ns.prompt("Choose the opponent:", {
-    type: "select",
-    choices: [
-      "No AI", "Netburners", "Slum Snakes", "The Black Hand",
-      "Tetrads", "Daedalus", "Illuminati", "????????????"
-    ]
-  });
-
+  let opponent = ns.args[0];
+  
   if (!opponent) {
-    ns.print("Operation cancelled. Exiting.");
-    return;
+    opponent = await ns.prompt("Choose the opponent:", {
+      type: "select",
+      choices: [
+        "No AI", "Netburners", "Slum Snakes", "The Black Hand",
+        "Tetrads", "Daedalus", "Illuminati", "????????????"
+      ]
+    });
+
+    if (!opponent) {
+      ns.tprint("❌ IPvGO Bot cancelled - No opponent selected. Script terminated.");
+      return;
+    }
   }
 
   // Enhanced Liberty Scanner - Optimized for 5x5

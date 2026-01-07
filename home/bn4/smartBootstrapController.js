@@ -1,10 +1,30 @@
-// VERSION: BN4 Startup Script v2.8.4
-// Updates: Simplified STUDY_HACK by moving network/requirement logic to NETWORK_ATTACK and PREP_FACTION.
+// VERSION: BN4 Startup Script v2.11.0
+// Updates: Fixed error handling, added documentation, improved code structure.
+//
+// PORT COMMUNICATION:
+// - Port 1: Used for communication with external scripts
+//   - Receives "SUCCESS" when TOR router or programs are purchased successfully
+//   - Cleared at startup to prevent stale data
+//
+// EXTERNAL SCRIPT DEPENDENCIES:
+// - bn4/stop-action.js: Stops current player actions
+// - bn4/gym-workout.js: Handles gym training for stats
+// - bn4/commit-crimes.js: Executes crime activities
+// - bn4/university-course.js: Handles university course enrollment
+// - bn4/faction-work.js: Manages faction work assignments
+// - bn4/travel.js: Handles city travel
+// - bn4/buy-tor.js: Purchases TOR router from darkweb
+// - bn4/buy-program.js: Purchases port programs from darkweb
+// - buy-custom-server-by-money-available.js: Buys custom servers
+// - /smart/run-smartQ-on-pservers.js: Runs hacking scripts on purchased servers
 
 /** @param {NS} ns */
 export async function main(ns) {
   ns.disableLog("ALL");
   ns.ui.openTail();
+
+  // Clear port 1 for clean communication
+  ns.clearPort(1);
 
   const t = () => {
     const date = new Date();
@@ -13,12 +33,6 @@ export async function main(ns) {
 
   const player = ns.getPlayer();
   ns.print(`${t()} [LOCATION] Current City: ${player.city}`);
-
-  ns.tprint(`
-    ${t()} === BN4 Startup Script v2.8.4 ===
-    Updates: Trying to fix minor bugs.
-    =================================
-  `);
 
   // =========================
   // CONSTANTS
@@ -31,10 +45,19 @@ export async function main(ns) {
   const TARGET_CITY = "Volhaven";
   const UNIVERSITY = "ZB Institute of Technology";
   const COURSE = "Algorithms";
+  
+  // External Scripts
   const CUSTOM_BY_MONEY_SCRIPT = "buy-custom-server-by-money-available.js";
-  const RUN_SIMPLEHACK_ON_PSERVERS_SCRIPT = "run-simplehack-on-pservers.js";
-  const HACK_SCRIPT = "init-hack-into-own-server.js";
-  const BOOTSTRAP_SCRIPT = "bn4/smart-bootstrap-controller.js";
+  const RUN_SMARTQ_ON_PSERVERS_SCRIPT = "/smart/run-smartQ-on-pservers.js";
+  const BOOTSTRAP_SCRIPT = "bn4/smartBootstrapController.js";
+  const STOP_ACTION_SCRIPT = "bn4/stop-action.js";
+  const GYM_WORKOUT_SCRIPT = "bn4/gym-workout.js";
+  const COMMIT_CRIMES_SCRIPT = "bn4/commit-crimes.js";
+  const UNIVERSITY_COURSE_SCRIPT = "bn4/university-course.js";
+  const FACTION_WORK_SCRIPT = "bn4/faction-work.js";
+  const TRAVEL_SCRIPT = "bn4/travel.js";
+  const BUY_TOR_SCRIPT = "bn4/buy-tor.js";
+  const BUY_PROGRAM_SCRIPT = "bn4/buy-program.js";
 
   const SHOPLIFT = "Shoplift";
   const MUG = "Mug";
@@ -113,26 +136,87 @@ export async function main(ns) {
 
   const ownedAugs = ns.singularity.getOwnedAugmentations(true);
   const targetAug = TARGET_AUGMENTS.find(aug => !ownedAugs.includes(aug.name));
+  
+  if (!targetAug) {
+    ns.print(`${t()} ❌ [ERROR] No target augmentation found!`);
+    return;
+  }
+  
   ns.print(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAug.price)} Rep | Req: ${ns.formatNumber(targetAug.rep)} Rep`);
-  ns.tprint(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction}| Price: ${ns.formatNumber(targetAug.price)} Rep | Req: ${ns.formatNumber(targetAug.rep)} Rep`);
+  ns.tprint(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAug.price)} Rep | Req: ${ns.formatNumber(targetAug.rep)} Rep`);
 
   let state = STATE.WARMUP;
   let lastLoggedState = "";
+  let torRouterPurchased = false;
 
   // =========================
   // HELPER FUNCTIONS
   // =========================
+  function findPath(current, goal, path, visited) {
+    visited.add(current);
+    if (current === goal) {
+      return true;
+    }
+    for (const n of ns.scan(current)) {
+      if (!visited.has(n)) {
+        path.push(n);
+        if (findPath(n, goal, path, visited)) {
+          return true;
+        }
+        path.pop();
+      }
+    }
+    return false;
+  }
+
+  async function ensureTorRouter() {
+    if (torRouterPurchased || ns.hasTorRouter()) {
+      torRouterPurchased = true;
+      return true;
+    }
+    
+    ns.exec(BUY_TOR_SCRIPT, "home", 1);
+    await ns.sleep(100);
+    const result = ns.readPort(1);
+    if (result === "SUCCESS") {
+      ns.print(`${t()} [PROGRESSION] TOR purchased.`);
+      torRouterPurchased = true;
+      return true;
+    }
+    return false;
+  }
+  function crackServer(server) {
+    if (ns.fileExists("BruteSSH.exe")) {
+      ns.brutessh(server);
+    }
+    if (ns.fileExists("FTPCrack.exe")) {
+      ns.ftpcrack(server);
+    }
+    if (ns.fileExists("relaySMTP.exe")) {
+      ns.relaysmtp(server);
+    }
+    if (ns.fileExists("HTTPWorm.exe")) {
+      ns.httpworm(server);
+    }
+    if (ns.fileExists("SQLInject.exe")) {
+      ns.sqlinject(server);
+    }
+    try {
+      ns.nuke(server);
+      return true;
+    } catch (e) {
+      ns.print(`${t()} ❌ [ERROR] Failed to nuke ${server}: ${e.message}`);
+      return false;
+    }
+  }
+
   function travelTo(destination) {
     const player = ns.getPlayer();
     const money = ns.getServerMoneyAvailable("home");
     if (player.city !== destination && money >= TRAVEL_COST) {
-      const success = ns.singularity.travelToCity(destination);
-      if (success) {
-        ns.print(`${t()} [TRAVEL] Moved to ${destination}`);
-        return true;
-      } else {
-        ns.print(`${t()} [TRAVEL FAIL] Could not move to ${destination}`);
-      }
+      ns.exec(TRAVEL_SCRIPT, "home", 1, destination);
+      // Small delay to allow the script to execute
+      return true;
     }
     return player.city === destination;
   }
@@ -140,7 +224,9 @@ export async function main(ns) {
   async function handleAugmentations() {
     const target = TARGET_AUGMENTS.find(aug => !ownedAugs.includes(aug.name));
 
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     const player = ns.getPlayer();
     if (player.factions.includes(target.faction)) {
@@ -149,7 +235,7 @@ export async function main(ns) {
 
       if (ns.getServerMoneyAvailable("home") >= price && rep >= target.rep) {
         if (ns.singularity.purchaseAugmentation(target.faction, target.name)) {
-          ns.print(`${t()} [AUGMENT] Purchased ${target.name} from ${target.faction}. Installing...`);
+          ns.print(`${t()} ✅ [AUGMENT] Purchased ${target.name} from ${target.faction}. Installing...`);
           ns.singularity.installAugmentations(BOOTSTRAP_SCRIPT);
         }
       }
@@ -158,38 +244,17 @@ export async function main(ns) {
 
   async function installBackdoor(target) {
     if (!ns.hasRootAccess(target)) {
-      if (ns.fileExists("BruteSSH.exe")) ns.brutessh(target);
-      if (ns.fileExists("FTPCrack.exe")) ns.ftpcrack(target);
-      if (ns.fileExists("relaySMTP.exe")) ns.relaysmtp(target);
-      if (ns.fileExists("HTTPWorm.exe")) ns.httpworm(target);
-      if (ns.fileExists("SQLInject.exe")) ns.sqlinject(target);
-      try { ns.nuke(target); } catch (e) {
-        ns.print(`${t()} [installBackdoor -> FAILED NUKE] Exception ${e}`);
+      const success = crackServer(target);
+      if (!success) {
+        ns.print(`${t()} ❌ [installBackdoor -> FAILED NUKE] Could not crack ${target}`);
+        return;
       }
-    }
-
-    if (!ns.hasRootAccess(target)) {
-      ns.print(`${t()} [installBackdoor] has not root access ${target} `);
-      return;
     }
 
     const path = [];
     const visited = new Set();
-    function findPath(current, goal, path) {
-      visited.add(current);
-      if (current === goal)
-        return true;
-      for (const n of ns.scan(current)) {
-        if (!visited.has(n)) {
-          path.push(n);
-          if (findPath(n, goal, path))
-            return true;
-          path.pop();
-        }
-      }
-      return false;
-    }
-    if (findPath("home", target, path)) {
+    
+    if (findPath("home", target, path, visited)) {
       for (const node of path) {
         ns.singularity.connect(node);
       }
@@ -198,12 +263,12 @@ export async function main(ns) {
         await ns.singularity.installBackdoor();
         isBackdoorInstalled = ns.getServer(target).backdoorInstalled;
         if (isBackdoorInstalled) {
-          ns.print(`${t()} [SUCCESS] Backdoor active on ${target}`);
+          ns.print(`${t()} ✅ [SUCCESS] Backdoor active on ${target}`);
         } else {
-          ns.print(`${t()} [FAILED] Could not install backdoor on ${target}`);
+          ns.print(`${t()} 🔶 [FAILED] Could not install backdoor on ${target}`);
         }
       } else {
-        ns.print(`${t()} [NOTICE] Backdoor already installed in ${target}`);
+        ns.print(`${t()} 🟡 [NOTICE] Backdoor already installed in ${target}`);
       }
       ns.singularity.connect("home");
     }
@@ -214,6 +279,7 @@ export async function main(ns) {
   // =========================
   if (ns.getServerMaxRam("home") >= 4) {
     if (!ns.fileExists("share.js", "home")) {
+      // share.js not found
     } else if (!ns.isRunning("share.js", "home")) {
       ns.exec("share.js", "home", 35);
     }
@@ -257,16 +323,16 @@ export async function main(ns) {
         if (money >= MIN_WARMUP_MONEY && needsStats) {
           const statToTrain = GYM_STATS.find(s => player.skills[s] < TARGET_STATS[s]);
           if (!work || work.type !== "GYM" || work.gymStat?.toLowerCase() !== statToTrain) {
-            ns.singularity.stopAction();
-            ns.singularity.gymWorkout(GYM, statToTrain, true);
-            ns.print(`${t()} [WARMUP] Training ${statToTrain}. Sleeping ${GYM_SESSION_TIME / 1000}s.`);
+            ns.exec(STOP_ACTION_SCRIPT, "home", 1);
+            ns.exec(GYM_WORKOUT_SCRIPT, "home", 1, GYM, statToTrain, true);
+            ns.print(`${t()} 🏋️ [WARMUP] Training ${statToTrain}. Sleeping ${GYM_SESSION_TIME / 1000}s.`);
             await ns.sleep(GYM_SESSION_TIME);
           }
         } else {
           if (!work || work.type !== "CRIME") {
-            ns.singularity.stopAction();
-            ns.singularity.commitCrime(SHOPLIFT, true);
-            ns.print(`${t()} [WARMUP FUNDING] Farming money for stats or travel.`);
+            ns.exec(STOP_ACTION_SCRIPT, "home", 1);
+            ns.exec(COMMIT_CRIMES_SCRIPT, "home", 1, SHOPLIFT, true);
+            ns.print(`${t()} 🔪 [WARMUP FUNDING] Farming money for stats or travel.`);
           }
         }
         await ns.sleep(2000);
@@ -276,7 +342,7 @@ export async function main(ns) {
       case STATE.CRIME: {
         if (targetAug && !player.factions.includes(targetAug.faction)) {
           const reqs = FACTION_REQS[targetAug.faction];
-          if (!reqs.money || money >= reqs.money) {
+          if (reqs && (!reqs.money || money >= reqs.money)) {
             state = STATE.PREP_FACTION;
             break;
           }
@@ -303,9 +369,9 @@ export async function main(ns) {
 
         const work = ns.singularity.getCurrentWork();
         if (!work || work.type !== "CRIME" || (work.type === "CRIME" && work.crimeType !== bestCrime)) {
-          ns.singularity.stopAction();
-          ns.singularity.commitCrime(bestCrime, true);
-          ns.print(`${t()} [CRIME] Committing ${bestCrime} (Chance: ${Math.round(ns.singularity.getCrimeChance(bestCrime) * 100)}%)`);
+          ns.exec(STOP_ACTION_SCRIPT, "home", 1);
+          ns.exec(COMMIT_CRIMES_SCRIPT, "home", 1, bestCrime, true);
+          ns.print(`${t()} 🔪 [CRIME] Committing ${bestCrime} (Chance: ${Math.round(ns.singularity.getCrimeChance(bestCrime) * 100)}%)`);
         }
 
         await ns.sleep(CRIME_LOOP_INTERVAL);
@@ -313,7 +379,10 @@ export async function main(ns) {
       }
 
       case STATE.PREP_FACTION: {
-        if (!targetAug) { state = STATE.CRIME; break; }
+        if (!targetAug) {
+          state = STATE.CRIME;
+          break;
+        }
         if (player.factions.includes(targetAug.faction)) {
           ns.print(`${t()} [STATE TRANSITION] PREP_FACTION -> FACTION_WORK. Reason: Faction membership confirmed.`);
           state = STATE.FACTION_WORK;
@@ -334,7 +403,9 @@ export async function main(ns) {
             break;
           }
 
-          if (reqs.city) travelTo(reqs.city);
+          if (reqs.city) {
+            travelTo(reqs.city);
+          }
 
           if (reqs.backdoor && !ns.getServer(reqs.backdoor).backdoorInstalled) {
             const portsOwned = PORT_PROGRAMS.filter(progName => ns.fileExists(progName, "home")).length;
@@ -372,8 +443,8 @@ export async function main(ns) {
 
         const work = ns.singularity.getCurrentWork();
         if (!work || work.type !== "CLASS") {
-          ns.singularity.stopAction();
-          ns.singularity.universityCourse(UNIVERSITY, COURSE, true);
+          ns.exec(STOP_ACTION_SCRIPT, "home", 1);
+          ns.exec(UNIVERSITY_COURSE_SCRIPT, "home", 1, UNIVERSITY, COURSE, true);
           ns.print(`${t()} [STUDY] Studying Algorithms at ${UNIVERSITY}`);
         }
 
@@ -382,10 +453,14 @@ export async function main(ns) {
         const reqs = FACTION_REQS[targetAug.faction];
         let targetLevel = 0;
         if (reqs) {
-          if (reqs.hack) targetLevel = reqs.hack;
+          if (reqs.hack) {
+            targetLevel = reqs.hack;
+          }
           if (reqs.backdoor) {
             const backdoorLevel = ns.getServerRequiredHackingLevel(reqs.backdoor);
-            if (backdoorLevel > targetLevel) targetLevel = backdoorLevel;
+            if (backdoorLevel > targetLevel) {
+              targetLevel = backdoorLevel;
+            }
           }
         }
 
@@ -446,27 +521,20 @@ export async function main(ns) {
 
 
           if (!ns.hasRootAccess(server)) {
-            if (ns.fileExists("BruteSSH.exe")) ns.brutessh(server);
-            if (ns.fileExists("FTPCrack.exe")) ns.ftpcrack(server);
-            if (ns.fileExists("relaySMTP.exe")) ns.relaysmtp(server);
-            if (ns.fileExists("HTTPWorm.exe")) ns.httpworm(server);
-            if (ns.fileExists("SQLInject.exe")) ns.sqlinject(server);
-            try { ns.nuke(server); ns.print(`${t()} [NUKE] ${server} rooted.`); } catch (e) { }
+            const success = crackServer(server);
+            if (success) {
+              ns.print(`${t()} ✅ [NUKE] ${server} rooted.`);
+            }
             if (ns.getServerMaxMoney(server) > 20000000) {
               ns.exec(CUSTOM_BY_MONEY_SCRIPT, "home", 1, 64);
-              ns.exec(RUN_SIMPLEHACK_ON_PSERVERS_SCRIPT, "home", 1);
+              ns.exec(RUN_SMARTQ_ON_PSERVERS_SCRIPT, "home", 1);
             }
           }
 
           if (ns.hasRootAccess(server)) {
             const reqs = FACTION_REQS[targetAug.faction];
-            if ((reqs && reqs.backdoor && reqs.backdoor == server) && currentHackLvl >= ns.getServerRequiredHackingLevel(server)) {
+            if (reqs && reqs.backdoor && reqs.backdoor === server && currentHackLvl >= ns.getServerRequiredHackingLevel(server)) {
               await installBackdoor(server);
-            }
-
-            if (ns.getServerMaxRam(server) >= 8 && !ns.isRunning(HACK_SCRIPT, server, server.toString(), "true")) {
-              ns.exec(HACK_SCRIPT, "home", 1, server, server.toString(), "true");
-              ns.print(`${t()} [DEPLOY] ${HACK_SCRIPT} on ${server}`);
             }
           }
           await ns.sleep(100);
@@ -498,9 +566,9 @@ export async function main(ns) {
 
         const work = ns.singularity.getCurrentWork();
         if (!work || work.type !== "FACTION" || work.factionName !== targetAug.faction) {
-          ns.singularity.stopAction();
-          ns.singularity.workForFaction(targetAug.faction, "Hacking Contracts", true);
-          ns.print(`${t()} [FACTION] Working for ${targetAug.faction} to aquire ${targetAug.name}`);
+          ns.exec(STOP_ACTION_SCRIPT, "home", 1);
+          ns.exec(FACTION_WORK_SCRIPT, "home", 1, targetAug.faction, "Hacking Contracts", true);
+          ns.print(`${t()} [FACTION] Working for ${targetAug.faction} to acquire ${targetAug.name}`);
         }
         await ns.sleep(LOOP_INTERVAL);
         ns.print(`${t()} [STATE TRANSITION] FACTION_WORK -> NETWORK_ATTACK. Reason: Periodic network attack check.`);
@@ -509,10 +577,10 @@ export async function main(ns) {
       }
 
       case STATE.PROGRESSION: {
-        if (!ns.hasTorRouter()) {
-          if (ns.singularity.purchaseTor())
-            ns.print(`${t()} [PROGRESSION] TOR purchased.`);
-          await ns.sleep(1000);
+        const hasTor = await ensureTorRouter();
+        if (!hasTor) {
+          ns.print(`${t()} [STATE TRANSITION] PROGRESSION -> CRIME. Reason: Insufficient funds for TOR router.`);
+          state = STATE.CRIME;
           break;
         }
 
@@ -520,11 +588,15 @@ export async function main(ns) {
         if (prog) {
           const cost = ns.singularity.getDarkwebProgramCost(prog);
           if (money >= cost) {
-            if (ns.singularity.purchaseProgram(prog)) {
-              ns.print(`${t()} [PROGRESSION] Bought ${prog} [STATE TRANSITION] PROGRESSION -> PREP_FACTION`);
+            ns.exec(BUY_PROGRAM_SCRIPT, "home", 1, prog);
+            await ns.sleep(100);
+            const result = ns.readPort(1);
+            if (result === "SUCCESS") {
+              ns.print(`${t()} [PROGRESSION] Bought ${prog}`);
+              ns.print(`${t()} [STATE TRANSITION] PROGRESSION -> PREP_FACTION. Reason: Program purchased.`);
               state = STATE.PREP_FACTION;
             } else {
-              ns.print(`${t()} [PROGRESSION] Failed to purchase ${prog} but we have funds! Game bug? `);
+              ns.print(`${t()} [PROGRESSION] Failed to purchase ${prog} but we have funds! Game bug?`);
             }
           } else {
             ns.print(`${t()} [STATE TRANSITION] PROGRESSION -> CRIME. Reason: Insufficient funds for ${prog} have/need (${ns.formatNumber(money)}/${ns.formatNumber(cost)}).`);

@@ -67,7 +67,7 @@ export async function main(ns) {
   }
 
   const level = ns.getHackingLevel();
-  
+
   // --- collect only servers you *can hack* ---
   const eligible = [];
   for (const server of servers) {
@@ -126,7 +126,7 @@ export async function main(ns) {
     const count = currentPservers.length;
     const maxServers = ns.getPurchasedServerLimit();
     ns.tprint(`Current personal servers: ${count}/${maxServers}.`);
-    
+
     if (count >= maxServers) {
       ns.tprint(`🚫 Maximum limit reached (${maxServers} servers).`);
       break;
