@@ -45,7 +45,7 @@ export async function main(ns) {
   const TARGET_CITY = "Volhaven";
   const UNIVERSITY = "ZB Institute of Technology";
   const COURSE = "Algorithms";
-  
+
   // External Scripts
   const CUSTOM_BY_MONEY_SCRIPT = "buy-custom-server-by-money-available.js";
   const RUN_SMARTQ_ON_PSERVERS_SCRIPT = "/smart/run-smartQ-on-pservers.js";
@@ -136,15 +136,15 @@ export async function main(ns) {
 
   const ownedAugs = ns.singularity.getOwnedAugmentations(true);
   const targetAug = TARGET_AUGMENTS.find(aug => !ownedAugs.includes(aug.name));
-  
+
   if (!targetAug) {
     ns.print(`${t()} ❌ [ERROR] No target augmentation found!`);
     return;
   }
-  
+
   const targetAugPrice = ns.singularity.getAugmentationPrice(targetAug.name);
   const targetAugRep = ns.singularity.getAugmentationRepReq(targetAug.name);
-  
+
   ns.print(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAugPrice)} | Rep: ${ns.formatNumber(targetAugRep)}`);
   ns.tprint(`${t()} [TARGET] ${targetAug.name} | Faction: ${targetAug.faction} | Price: ${ns.formatNumber(targetAugPrice)} | Rep: ${ns.formatNumber(targetAugRep)}`);
 
@@ -186,7 +186,7 @@ export async function main(ns) {
       torRouterPurchased = true;
       return true;
     }
-    
+
     ns.exec(BUY_TOR_SCRIPT, "home", 1);
     await ns.sleep(100);
     const result = ns.readPort(1);
@@ -263,7 +263,7 @@ export async function main(ns) {
 
     const path = [];
     const visited = new Set();
-    
+
     if (findPath("home", target, path, visited)) {
       for (const node of path) {
         ns.singularity.connect(node);
@@ -292,13 +292,13 @@ export async function main(ns) {
     ns.exec("contracts/contract-daemon.js", "home", 1);
     ns.print(`${t()} [BOOTSTRAP] Started contract daemon`);
   }
-  
+
   // Start IPvGO bot
   if (!ns.isRunning("go/go-claude.js", "home")) {
     ns.exec("go/go-claude.js", "home", 1, "Slum Snakes");
     ns.print(`${t()} [BOOTSTRAP] Started IPvGO bot against Slum Snakes`);
   }
-  
+
   if (ns.getServerMaxRam("home") >= 4) {
     if (!ns.fileExists("share.js", "home")) {
       // share.js not found
@@ -315,7 +315,7 @@ export async function main(ns) {
     const realPlayer = ns.getPlayer();
     const hackingLevel = ns.getHackingLevel();
     const currentWork = ns.singularity.getCurrentWork();
-    
+
     const player = shadowPlayer(realPlayer, hackingLevel);
 
     if (targetAug) {
