@@ -1,7 +1,23 @@
 /**
- * Enhanced Hacker Gang Controller — V4.0.0
- * Features: Dynamic Ascension | Linear Regression | Smart Logging | Budget Control
- * @param {NS} ns
+ * VERSION: 4.1.0
+ * ENHANCED HACKER GANG CONTROLLER
+ *
+ * DESCRIPTION:
+ * Advanced gang management with dynamic ascension, linear regression analysis,
+ * smart logging, and budget control for equipment purchases.
+ *
+ * FEATURES:
+ * - Dynamic Ascension Thresholds (1.6x/1.4x/1.3x based on multipliers)
+ * - Linear Regression Money Saturation Analysis
+ * - Smart Logging (conditional based on efficiency changes)
+ * - Budget Control (25% for gear, 30% for vehicles)
+ * - Dynamic Wanted Level Management (90%/93%/95% based on gang size)
+ *
+ * PORT USAGE:
+ * - Port 3: Global purchase control ("DISABLE" to stop all purchases)
+ *
+ * EXTERNAL FILES:
+ * None - self-contained script
  */
 export async function main(ns) {
   // Check if script is already running
@@ -165,21 +181,29 @@ export async function main(ns) {
 
   const assign = (m, task) => {
     const info = ns.gang.getMemberInformation(m);
-    if (info.task === task) return;
+    if (info.task === task) {
+      return;
+    }
     ns.gang.setMemberTask(m, task);
     ns.print(`${getTS()}[TASK] 💻 ${m} (H:${Math.floor(info.hack)} C:${Math.floor(info.cha)}) -> ${task}`);
   };
 
   const buyGear = (m) => {
-    if (ns.peek(PURCHASE_PORT) === "DISABLE") return;
+    if (ns.peek(PURCHASE_PORT) === "DISABLE") {
+      return;
+    }
     const info = ns.gang.getMemberInformation(m);
     const cash = ns.getServerMoneyAvailable("home");
 
-    // Buy regular gear first
+    // Buy regular gear with cost limit
     for (const g of GEAR) {
-      if (info.upgrades.includes(g) || info.augmentations.includes(g)) continue;
+      if (info.upgrades.includes(g) || info.augmentations.includes(g)) {
+        continue;
+      }
       const cost = ns.gang.getEquipmentCost(g);
-      if (cash < cost) continue;
+      if (cost > cash * 0.25) {
+        continue;
+      }
       if (ns.gang.purchaseEquipment(m, g)) {
         ns.print(`${getTS()}[GEAR] 📦 ${m} purchased ${g}`);
       }
@@ -187,14 +211,26 @@ export async function main(ns) {
 
     // Buy vehicles with cost limit
     for (const v of VEHICLES) {
-      if (info.upgrades.includes(v) || info.augmentations.includes(v)) continue;
-      if (v === "Ford Flex V20" && info.cha >= 20) continue;
-      if (v === "ATX1070 Superbike" && info.cha >= 50) continue;
-      if (v === "Mercedes-Benz S9001" && info.cha >= 100) continue;
-      if (v === "White Ferrari" && info.cha >= 150) continue;
+      if (info.upgrades.includes(v) || info.augmentations.includes(v)) {
+        continue;
+      }
+      if (v === "Ford Flex V20" && info.cha >= 20) {
+        continue;
+      }
+      if (v === "ATX1070 Superbike" && info.cha >= 50) {
+        continue;
+      }
+      if (v === "Mercedes-Benz S9001" && info.cha >= 100) {
+        continue;
+      }
+      if (v === "White Ferrari" && info.cha >= 150) {
+        continue;
+      }
 
       const cost = ns.gang.getEquipmentCost(v);
-      if (cost > cash * 0.3) continue;
+      if (cost > cash * 0.3) {
+        continue;
+      }
       if (ns.gang.purchaseEquipment(m, v)) {
         ns.print(`${getTS()}[VEHICLE] 🚗 ${m} purchased ${v}`);
       }
@@ -203,7 +239,9 @@ export async function main(ns) {
 
   const tryAscend = (m) => {
     const r = ns.gang.getAscensionResult(m);
-    if (!r) return false;
+    if (!r) {
+      return false;
+    }
 
     const info = ns.gang.getMemberInformation(m);
     const threshold = getDynamicAscensionThreshold(info);
@@ -229,8 +267,9 @@ export async function main(ns) {
     const gang = ns.gang.getGangInformation();
     for (const t of ns.gang.getTaskNames()) {
       const s = ns.gang.getTaskStats(t);
-      if (s.baseMoney <= 0) continue;
-      if (t === RANSOMWARE_TASK && info.hack >= HACK_THRESHOLD) continue;
+      if (s.baseMoney <= 0 || (t === RANSOMWARE_TASK && info.hack >= HACK_THRESHOLD)) {
+        continue;
+      }
       const money = s.baseMoney * info.hack * gang.wantedPenalty;
       const wanted = Math.max(s.baseWanted, 0.001);
       const score = money / wanted;
@@ -283,7 +322,9 @@ export async function main(ns) {
         let growthReady = true;
         let anyAscGrowth = false;
         members.forEach(m => {
-          if (tryAscend(m)) anyAscGrowth = true;
+          if (tryAscend(m)) {
+            anyAscGrowth = true;
+          }
           const info = ns.gang.getMemberInformation(m);
           buyGear(m);
           if (info.hack < HACK_THRESHOLD) {
@@ -296,8 +337,11 @@ export async function main(ns) {
             assign(m, RESPECT_TASK);
           }
         });
-        if (anyAscGrowth) enter(State.RESET);
-        else if (growthReady) enter(State.PRODUCTION);
+        if (anyAscGrowth) {
+          enter(State.RESET);
+        } else if (growthReady) {
+          enter(State.PRODUCTION);
+        }
         break;
 
       case State.PRODUCTION:
@@ -306,8 +350,11 @@ export async function main(ns) {
           buyGear(m);
           if (i < RESPECT_SLOTS) {
             const info = ns.gang.getMemberInformation(m);
-            if (info.hack < HACK_THRESHOLD) assign(m, PLANT_VIRUS_TASK);
-            else assign(m, RESPECT_TASK);
+            if (info.hack < HACK_THRESHOLD) {
+              assign(m, PLANT_VIRUS_TASK);
+            } else {
+              assign(m, RESPECT_TASK);
+            }
           } else {
             assignBestMoney(m);
           }
@@ -324,13 +371,17 @@ export async function main(ns) {
         } else {
           goToReduction = false;
         }
-        if (goToReduction) enter(State.REDUCTION);
+        if (goToReduction) {
+          enter(State.REDUCTION);
+        }
         break;
 
       case State.REDUCTION:
         let anyAscendedThisTick = false;
         for (const m of members) {
-          if (tryAscend(m)) anyAscendedThisTick = true;
+          if (tryAscend(m)) {
+            anyAscendedThisTick = true;
+          }
           buyGear(m);
           assign(m, WANTED_TASK);
         }
@@ -346,7 +397,9 @@ export async function main(ns) {
           leaveReduction = false;
         }
 
-        if (leaveReduction) enter(State.RESET);
+        if (leaveReduction) {
+          enter(State.RESET);
+        }
         break;
 
       case State.RESET:
@@ -355,9 +408,15 @@ export async function main(ns) {
           tryAscend(m);
           buyGear(m);
           const info = ns.gang.getMemberInformation(m);
-          if (info.hack < HACK_THRESHOLD || info.cha < CHA_THRESHOLD) resetReady = false;
+          if (info.hack < HACK_THRESHOLD || info.cha < CHA_THRESHOLD) {
+            resetReady = false;
+          }
         });
-        enter(resetReady ? State.PRODUCTION : State.GROWTH);
+        if (resetReady) {
+          enter(State.PRODUCTION);
+        } else {
+          enter(State.GROWTH);
+        }
         break;
     }
 
