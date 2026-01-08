@@ -29,17 +29,21 @@ const SCRIPT_SET_GYM = "/sleeves/setToGym.js";
 export async function main(ns) {
   ns.disableLog("ALL");
 
-  // Check if script is already running
-  const runningProcesses = ns.ps("home").filter(p =>
-    p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
-  );
+  const checkDuplicateProcess = () => {
+    const runningProcesses = ns.ps("home").filter(p =>
+      p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
+    );
+    
+    if (runningProcesses.length > 0) {
+      ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running on home server!");
+      ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+      ns.tprint("   Please kill the existing instance before starting a new one.");
+      return true;
+    }
+    return false;
+  };
 
-  if (runningProcesses.length > 0) {
-    ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running on home server!");
-    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
-    ns.tprint("   Please kill the existing instance before starting a new one.");
-    return;
-  }
+  if (checkDuplicateProcess()) return;
 
   ns.clearPort(10);
 
@@ -87,28 +91,6 @@ export async function main(ns) {
     }
   };
 
-  const callHacknet = async (port, script) => {
-    const pid = ns.run(script, 1);
-    if (pid === 0) {
-      return null;
-    }
-    let response = ns.readPort(port);
-    let attempts = 0;
-    while (response === "NULL PORT DATA") {
-      await ns.sleep(50);
-      response = ns.readPort(port);
-      attempts++;
-      if (attempts > 100) {
-        return null;
-      }
-    }
-    try {
-      return JSON.parse(response);
-    } catch (e) {
-      return null;
-    }
-  };
-
   const exec = (script, ...args) => {
     const pid = ns.run(script, 1, ...args);
     if (pid === 0) {
@@ -138,64 +120,43 @@ export async function main(ns) {
         continue;
       }
 
-      const { stats, task } = data;
-      const str = Math.round(stats.strength);
-      const def = Math.round(stats.defense);
-      const dex = Math.round(stats.dexterity);
-      const agi = Math.round(stats.agility);
+      const stats = {
+        str: Math.round(data.stats.strength),
+        def: Math.round(data.stats.defense),
+        dex: Math.round(data.stats.dexterity),
+        agi: Math.round(data.stats.agility)
+      };
+
+      const { task } = data;
 
       let currentTaskName = "IDLE";
       if (task) {
         if (task.type === "CLASS") {
-          if (task.classType === "str") {
-            currentTaskName = "strength";
-          } else if (task.classType === "def") {
-            currentTaskName = "defense";
-          } else if (task.classType === "dex") {
-            currentTaskName = "dexterity";
-          } else if (task.classType === "agi") {
-            currentTaskName = "agility";
-          } else {
-            currentTaskName = "CLASS";
-          }
+          const classMap = { str: "strength", def: "defense", dex: "dexterity", agi: "agility" };
+          currentTaskName = classMap[task.classType] || "CLASS";
         } else {
-          if (task.gymStatType) {
-            currentTaskName = task.gymStatType;
-          } else if (task.crimeType) {
-            currentTaskName = task.crimeType;
-          } else {
-            currentTaskName = task.type;
-          }
+          currentTaskName = task.classType || task.crimeType || task.type;
         }
       }
 
-      ns.print(`[Sleeve ${i}] ⚡${Math.round(stats.shock)}% 💪${str}/${def}/${dex}/${agi} 🎭${currentTaskName}`);
+      ns.print(`[Sleeve ${i}] ⚡${Math.round(data.stats.shock)}% 💪${stats.str}/${stats.def}/${stats.dex}/${stats.agi} 🎭${currentTaskName}`);
 
-      let targetStat = null;
-      if (str < 50) {
-        targetStat = "strength";
-      } else if (def < 50) {
-        targetStat = "defense";
-      } else if (dex < 50) {
-        targetStat = "dexterity";
-      } else if (agi < 50) {
-        targetStat = "agility";
-      }
+      const targetStat = ["str", "def", "dex", "agi"].find(stat => stats[stat] < 50);
 
       const neededBudget = (trainingSleevesCount + 1) * 2500;
 
-      if (stats.shock > 0) {
+      if (data.stats.shock > 0) {
         if (!task || task.type !== "RECOVERY") {
           ns.print(`Sleeve ${i}: Transitioning to Recovery.`);
           exec(SCRIPT_SET_RECOVERY, i);
         }
-      } else if (stats.sync < 100) {
-        if (!task || task.type !== "SYNCHRONIZE") {
+      } else if (data.stats.sync < 100) {
+        if (!task || task.type !== "SYNCHRO") {
           ns.print(`🔄 Sleeve ${i}: Transitioning to Sync.`);
           exec(SCRIPT_SET_SYNC, i);
         }
       } else if (targetStat && playerMoney >= neededBudget) {
-        if (currentTaskName !== targetStat) {
+        if (task?.classType !== targetStat) {
           ns.print(`🏋️ Sleeve ${i}: Training ${targetStat} at Powerhouse Gym`);
           exec(SCRIPT_SET_GYM, i, "Powerhouse Gym", targetStat);
         }
@@ -203,16 +164,14 @@ export async function main(ns) {
       } else if (targetStat && playerMoney < neededBudget) {
         ns.print(`🟡 Sleeve ${i}: Insufficient budget for Gym ($${ns.formatNumber(neededBudget)} needed)`);
       } else {
-        const combatAvg = (str + def + dex + agi) / 4;
-        let targetCrime;
-        if (combatAvg > 100) {
-          targetCrime = "Homicide";
-        } else if (combatAvg > 30) {
-          targetCrime = "Mug";
-        } else {
-          targetCrime = "Shoplift";
-        }
-
+        const getCrimeForStats = (stats) => {
+          const combatAvg = (stats.str + stats.def + stats.dex + stats.agi) / 4;
+          if (combatAvg > 170) return "Homicide";
+          if (combatAvg > 30) return "Mug";
+          return "Shoplift";
+        };
+        
+        const targetCrime = getCrimeForStats(stats);
         if (!task || task.type !== "CRIME" || task.crimeType !== targetCrime) {
           ns.print(`🔪 Sleeve ${i}: Upgrading crime ${task?.crimeType || 'none'} -> ${targetCrime}`);
           exec(SCRIPT_SET_CRIME, i, targetCrime);
