@@ -1,9 +1,21 @@
 /**
- * Metric-Driven Gang Controller — V3.0.0
- * Feature: Vehicles now have Charisma requirements for purchase.
+ * Enhanced Hacker Gang Controller — V4.0.0
+ * Features: Dynamic Ascension | Linear Regression | Smart Logging | Budget Control
  * @param {NS} ns
  */
 export async function main(ns) {
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "gang/gang-hacker-controller.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: gang-hacker-controller.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   ns.disableLog("ALL");
   ns.ui.openTail();
   ns.ui.resizeTail(950, 600);
@@ -22,15 +34,23 @@ export async function main(ns) {
 
   const HACK_THRESHOLD = 200;
   const CHA_THRESHOLD = 20;
-  const ASCENSION_THRESHOLD = 1.30;
+  const getDynamicAscensionThreshold = (info) => {
+    if (info.hack_asc_mult < 10) return 1.6;   // Early game: quick ascensions
+    if (info.hack_asc_mult < 100) return 1.4;  // Mid game: balanced growth
+    return 1.3;                                // Late game: incremental gains
+  };
 
   const RESPECT_SLOTS = 2;
-  const WANTED_PENALTY_MIN = 0.95;
+  const getDynamicWantedMin = (memberCount) => {
+    if (memberCount >= 11) return 0.90;  // Full gang: more aggressive
+    if (memberCount >= 7) return 0.93;   // Medium gang: balanced
+    return 0.95;                         // Small gang: conservative
+  };
 
   const MONEY_TREND_WINDOW = 6;
   const MONEY_GROWTH_EPSILON = 0.01;
 
-  const FAILSAFE_MAX_PHASE_TIME = 45 * 60 * 1000;
+  const FAILSAFE_MAX_PHASE_TIME = 60 * 60 * 1000;
   const PURCHASE_PORT = 3;
 
   const GEAR = [
@@ -78,21 +98,21 @@ export async function main(ns) {
 
   const printHeader = (gang) => {
     ns.print("------------------------------------------------------------------------------------------------");
-    ns.print(`  GANG CONTROL CENTER v3.0.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
+    ns.print(`  HACKER GANG CONTROL v4.0.0 | ${new Date().toLocaleTimeString()} | Respect: ${ns.formatNumber(gang.respect)}`);
     ns.print(`  State: ${state} | Efficiency: ${(gang.wantedPenalty * 100).toFixed(2)}% | Members: ${ns.gang.getMemberNames().length}/12`);
+    ns.print(`  Linear Regression | Dynamic Thresholds | Smart Ascension | Budget Control`);
     ns.print("------------------------------------------------------------------------------------------------");
   };
 
   const printStatus = (gang, force = false) => {
     const currEff = (gang.wantedPenalty * 100).toFixed(1);
     const canBuy = ns.peek(PURCHASE_PORT) !== "DISABLE";
+    const memberCount = ns.gang.getMemberNames().length;
+    const minEff = (getDynamicWantedMin(memberCount) * 100).toFixed(0);
 
     if (force || Math.abs(parseFloat(currEff) - lastLoggedEfficiency) >= 0.5) {
-      ns.print(
-        `${getTS()}[STATUS] 📊 ${state} | $${ns.formatNumber(gang.moneyGainRate)}/s | ` +
-        `Eff: ${currEff}% | Buy: ${canBuy ? "✅" : "🛑"}`
-      );
-      if (!canBuy) {ns.toast("Gang manager script: Global Purchases are DISABLED (Port 3)", "warning", 120000);}
+      ns.print(`${getTS()}[STATUS] 📊 ${state} | $${ns.formatNumber(gang.moneyGainRate)}/s | Eff: ${currEff}%/${minEff}% | Buy: ${canBuy ? "✅" : "🛑"}`);
+      if (!canBuy) ns.toast("Hacker Gang: Global Purchases are DISABLED (Port 3)", "warning", 120000);
       lastLoggedEfficiency = parseFloat(currEff);
     }
   };
@@ -121,16 +141,33 @@ export async function main(ns) {
 
   const moneySaturated = () => {
     if (moneyHistory.length < MONEY_TREND_WINDOW) return false;
-    const a = moneyHistory[0];
-    const b = moneyHistory[moneyHistory.length - 1];
-    return (b - a) / Math.max(a, 1) < MONEY_GROWTH_EPSILON;
+
+    const n = moneyHistory.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumXX = 0;
+
+    for (let i = 0; i < n; i++) {
+      const x = i;
+      const y = moneyHistory[i];
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumXX += x * x;
+    }
+
+    const slope = (n * sumXY - sumX * sumY) / Math.max((n * sumXX - sumX * sumX), 1);
+    const avg = sumY / n;
+
+    return slope / Math.max(avg, 1) < MONEY_GROWTH_EPSILON;
   };
 
   const assign = (m, task) => {
     const info = ns.gang.getMemberInformation(m);
     if (info.task === task) return;
     ns.gang.setMemberTask(m, task);
-    ns.print(`${getTS()}[TASK] 🛠️ ${m} (H:${Math.floor(info.hack)} C:${Math.floor(info.cha)}) -> ${task}`);
+    ns.print(`${getTS()}[TASK] 💻 ${m} (H:${Math.floor(info.hack)} C:${Math.floor(info.cha)}) -> ${task}`);
   };
 
   const buyGear = (m) => {
@@ -167,9 +204,14 @@ export async function main(ns) {
   const tryAscend = (m) => {
     const r = ns.gang.getAscensionResult(m);
     if (!r) return false;
-    if (r.hack >= ASCENSION_THRESHOLD) {
+
+    const info = ns.gang.getMemberInformation(m);
+    const threshold = getDynamicAscensionThreshold(info);
+
+    if (r.hack >= threshold) {
       if (ns.gang.ascendMember(m)) {
-        ns.print(`${getTS()}[ASCEND] ✨ ${m} (H-Mult: ${r.hack.toFixed(2)})`);
+        const mult = info.hack_asc_mult.toFixed(1);
+        ns.print(`${getTS()}[ASCEND] ✨ ${m} (${mult}x mult, ${threshold}x threshold) (H:${r.hack?.toFixed(2)})`);
         return true;
       }
     }
@@ -272,8 +314,9 @@ export async function main(ns) {
         });
 
         let goToReduction = true;
-        if (gang.wantedPenalty < WANTED_PENALTY_MIN) {
-          ns.print(`${getTS()}[TRANSITION] 🟡 Reason: Efficiency dropped below ${WANTED_PENALTY_MIN * 100}%`);
+        const currentWantedMin = getDynamicWantedMin(members.length);
+        if (gang.wantedPenalty < currentWantedMin) {
+          ns.print(`${getTS()}[TRANSITION] 🟡 Reason: Efficiency dropped below ${(currentWantedMin * 100).toFixed(0)}%`);
         } else if (moneySaturated()) {
           ns.print(`${getTS()}[TRANSITION] 💸 Reason: Money growth saturated`);
         } else if (failsafe()) {
