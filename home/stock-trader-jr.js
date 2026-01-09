@@ -1,5 +1,6 @@
 // VERSION 1.4.0
 // Simple Stock Trader with Auto-Upgrade to PRO
+// CONSERVATIVE MOMENTUM: Only buy stocks with strong upward momentum
 //
 // PORT COMMUNICATION:
 // - Port 1: Sends stock sale proceeds to money manager
@@ -17,13 +18,13 @@ export async function main(ns) {
   // 1) CONFIGURATION
   // ============================================================
 
-  const PROFIT_TARGET = 0.05;   // Sell when 5% profit
-  const STOP_LOSS = -0.04;      // Sell when -4% loss
-  const MAX_POSITIONS = 6;      // Maximum number of stocks to hold
-  const EXPOSURE = 1.00;        // Use 100% of available cash
+  const PROFIT_TARGET = 0.08;   // Sell when 8% profit
+  const STOP_LOSS = -0.15;      // Sell when -15% loss
+  const MAX_POSITIONS = 10;     // Maximum positions
+  const EXPOSURE = 0.80;        // Use 80% of available cash
   const CYCLE_TIME = 6000;      // 6 seconds (stock update frequency)
   const COMMISSION = 100000;    // 100k per trade
-  const MIN_MOMENTUM = 0.01;    // Minimum 1% momentum to buy
+  const MIN_MOMENTUM = 0.01;    // Buy only if momentum > 1%
 
   const priceHistory = new Map();
   let recentActions = []; // Persistent action history
@@ -33,7 +34,7 @@ export async function main(ns) {
   // ============================================================
 
   ns.tprint("=================================================");
-  ns.tprint("🤖 STOCK TRADER v1.4.0 - BALANCED MODE");
+  ns.tprint("🤖 STOCK TRADER v1.4.0 - CONSERVATIVE MOMENTUM");
   ns.tprint(`📊 Target: ${(PROFIT_TARGET * 100)}% | Stop: ${(STOP_LOSS * 100)}%`);
   ns.tprint("=================================================");
 
@@ -52,7 +53,6 @@ export async function main(ns) {
     return { shares: longShares, avgPrice: longAvgPrice };
   }
 
-  // --- AUTO-UPGRADE FUNCTION ---
   async function manageMarketUpgrades() {
     const has4S = ns.stock.purchase4SMarketData();
     const has4SAPI = ns.stock.purchase4SMarketDataTixApi();
@@ -69,18 +69,17 @@ export async function main(ns) {
     }
     const history = priceHistory.get(sym);
     history.push(price);
-    if (history.length > 30) {
+    if (history.length > 50) {
       history.shift();
     }
   }
 
   function getMomentum(sym) {
     const history = priceHistory.get(sym);
-    if (!history || history.length < 15) {
+    if (!history || history.length < 6) {
       return 0;
     }
 
-    // Compare average of last 3 prices with average of first 3 in window
     const recentAvg = (history[history.length - 1] + history[history.length - 2] + history[history.length - 3]) / 3;
     const oldAvg = (history[0] + history[1] + history[2]) / 3;
 
@@ -92,13 +91,10 @@ export async function main(ns) {
   // ============================================================
 
   while (true) {
-    // Check for upgrades at start of each cycle
     await manageMarketUpgrades();
 
     const currentCash = getCash();
-    let actions = [];
 
-    // Get all stock data and update price history
     const stockData = symbols.map(sym => {
       const price = ns.stock.getPrice(sym);
       updatePriceHistory(sym, price);
@@ -112,7 +108,7 @@ export async function main(ns) {
     }).sort((a, b) => b.momentum - a.momentum);
 
     // ============================================================
-    // 5) SELL POSITIONS (Check existing positions first)
+    // 5) SELL POSITIONS
     // ============================================================
 
     for (const stock of stockData) {
@@ -152,7 +148,6 @@ export async function main(ns) {
     // 6) BUY NEW POSITIONS
     // ============================================================
 
-    // Count current positions after sells
     let activePositions = stockData.filter(stock => {
       return getPosition(stock.sym).shares > 0;
     }).length;
@@ -198,14 +193,10 @@ export async function main(ns) {
     let totalInvested = 0;
     let totalUnrealized = 0;
 
-
-    // Portfolio calculation moved to display section
-
     ns.clearLog();
     ns.print("📊 MARKET STATUS");
     ns.print("-------------------------------------------------");
 
-    // Collect positions for alphabetical display
     const positionsToDisplay = [];
 
     for (const stock of stockData) {
@@ -226,7 +217,6 @@ export async function main(ns) {
       }
     }
 
-    // Sort alphabetically for consistent display
     positionsToDisplay.sort((a, b) => a.sym.localeCompare(b.sym));
 
     for (const pos of positionsToDisplay) {
