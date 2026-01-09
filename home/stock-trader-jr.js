@@ -1,4 +1,4 @@
-// VERSION 1.2.1
+// VERSION 1.2.2
 // Simple Stock Trader with Auto-Upgrade to PRO
 
 /** @param {NS} ns */
@@ -24,7 +24,7 @@ export async function main(ns) {
   // ============================================================
 
   ns.tprint("=================================================");
-  ns.tprint("🤖 STOCK TRADER v1.2.1 - MOMENTUM MODE");
+  ns.tprint("🤖 STOCK TRADER v1.2.2 - MOMENTUM MODE");
   ns.tprint(`📊 Target: ${(PROFIT_TARGET * 100)}% | Stop: ${(STOP_LOSS * 100)}%`);
   ns.tprint("=================================================");
 
@@ -67,13 +67,15 @@ export async function main(ns) {
 
   function getMomentum(sym) {
     const history = priceHistory.get(sym);
-    if (!history || history.length < 5) {
+    if (!history || history.length < 10) {
       return 0;
     }
-    const recent = history.slice(-5);
-    const oldest = recent[0];
-    const newest = recent[recent.length - 1];
-    return (newest - oldest) / oldest;
+
+    // Compare average of last 3 prices with average of first 3 in window
+    const recentAvg = (history[history.length - 1] + history[history.length - 2] + history[history.length - 3]) / 3;
+    const oldAvg = (history[0] + history[1] + history[2]) / 3;
+
+    return (recentAvg - oldAvg) / oldAvg;
   }
 
   // ============================================================
