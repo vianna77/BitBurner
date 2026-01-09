@@ -1,5 +1,13 @@
-// VERSION 1.2.2
+// VERSION 1.4.0
 // Simple Stock Trader with Auto-Upgrade to PRO
+//
+// PORT COMMUNICATION:
+// - Port 1: Sends stock sale proceeds to money manager
+//   Format: { source: "STOCK", amount: totalSaleAmount }
+//
+// EXTERNAL FILES:
+// - stocker-trader-pro.js: Advanced trader with forecast data
+//   Used when 4S Market Data APIs become available
 
 /** @param {NS} ns */
 export async function main(ns) {
@@ -10,11 +18,12 @@ export async function main(ns) {
   // ============================================================
 
   const PROFIT_TARGET = 0.05;   // Sell when 5% profit
-  const STOP_LOSS = -0.03;      // Sell when -3% loss
-  const MAX_POSITIONS = 5;      // Maximum number of stocks to hold
-  const EXPOSURE = 0.80;        // Use 80% of available cash
+  const STOP_LOSS = -0.04;      // Sell when -4% loss
+  const MAX_POSITIONS = 6;      // Maximum number of stocks to hold
+  const EXPOSURE = 1.00;        // Use 100% of available cash
   const CYCLE_TIME = 6000;      // 6 seconds (stock update frequency)
   const COMMISSION = 100000;    // 100k per trade
+  const MIN_MOMENTUM = 0.01;    // Minimum 1% momentum to buy
 
   const priceHistory = new Map();
   let recentActions = []; // Persistent action history
@@ -24,7 +33,7 @@ export async function main(ns) {
   // ============================================================
 
   ns.tprint("=================================================");
-  ns.tprint("🤖 STOCK TRADER v1.2.2 - MOMENTUM MODE");
+  ns.tprint("🤖 STOCK TRADER v1.4.0 - BALANCED MODE");
   ns.tprint(`📊 Target: ${(PROFIT_TARGET * 100)}% | Stop: ${(STOP_LOSS * 100)}%`);
   ns.tprint("=================================================");
 
@@ -60,14 +69,14 @@ export async function main(ns) {
     }
     const history = priceHistory.get(sym);
     history.push(price);
-    if (history.length > 20) {
+    if (history.length > 30) {
       history.shift();
     }
   }
 
   function getMomentum(sym) {
     const history = priceHistory.get(sym);
-    if (!history || history.length < 10) {
+    if (!history || history.length < 15) {
       return 0;
     }
 
@@ -118,9 +127,6 @@ export async function main(ns) {
         } else if (currentReturn <= STOP_LOSS) {
           shouldSell = true;
           reason = "STOP LOSS 🔴";
-        } else if (stock.momentum < 0 && currentReturn > 0.01) {
-          shouldSell = true;
-          reason = "MOMENTUM DROP 📉";
         }
 
         if (shouldSell) {
@@ -130,9 +136,12 @@ export async function main(ns) {
             const profit = (sellPrice - stock.position.avgPrice) * stock.position.shares - (2 * COMMISSION);
 
             ns.writePort(1, { source: "STOCK", amount: totalAmount });
-            const actionMsg = `✅ SOLD ${stock.sym} | ${reason} | P&L: ${ns.formatNumber(profit)}`;
+            const returnPercent = (currentReturn * 100).toFixed(2);
+            const actionMsg = `✅ SOLD ${stock.sym} | ${reason} (${returnPercent}%) | P&L: ${ns.formatNumber(profit)}`;
             recentActions.push(actionMsg);
-            if (recentActions.length > 10) recentActions.shift();
+            if (recentActions.length > 10) {
+              recentActions.shift();
+            }
             ns.toast(`${stock.sym} ${reason}`, "info");
           }
         }
@@ -156,7 +165,7 @@ export async function main(ns) {
 
       const candidates = stockData.filter(s => {
         return s.position.shares === 0 &&
-          s.momentum > 0.005 &&
+          s.momentum > MIN_MOMENTUM &&
           budgetPerStock > (COMMISSION * 10);
       }).slice(0, availableSlots);
 
@@ -171,7 +180,9 @@ export async function main(ns) {
             if (buyPrice > 0) {
               const actionMsg = `💸 BOUGHT ${stock.sym} | Momentum: ${(stock.momentum * 100).toFixed(2)}%`;
               recentActions.push(actionMsg);
-              if (recentActions.length > 10) recentActions.shift();
+              if (recentActions.length > 10) {
+                recentActions.shift();
+              }
               activePositions++;
             }
           }
@@ -194,6 +205,9 @@ export async function main(ns) {
     ns.print("📊 MARKET STATUS");
     ns.print("-------------------------------------------------");
 
+    // Collect positions for alphabetical display
+    const positionsToDisplay = [];
+
     for (const stock of stockData) {
       const pos = getPosition(stock.sym);
       if (pos.shares > 0) {
@@ -203,8 +217,20 @@ export async function main(ns) {
         totalInvested += cost;
         totalUnrealized += pnl;
 
-        ns.print(`${stock.sym.padEnd(6)} | Qty: ${ns.formatNumber(pos.shares).padEnd(6)} | P&L: ${ns.formatNumber(pnl).padEnd(8)} (${(pnl/cost*100).toFixed(2)}%)`);
+        positionsToDisplay.push({
+          sym: stock.sym,
+          shares: pos.shares,
+          pnl: pnl,
+          pnlPercent: (pnl/cost*100).toFixed(2)
+        });
       }
+    }
+
+    // Sort alphabetically for consistent display
+    positionsToDisplay.sort((a, b) => a.sym.localeCompare(b.sym));
+
+    for (const pos of positionsToDisplay) {
+      ns.print(`${pos.sym.padEnd(6)} | Qty: ${ns.formatNumber(pos.shares).padEnd(6)} | P&L: ${ns.formatNumber(pos.pnl).padEnd(8)} (${pos.pnlPercent}%)`);
     }
 
     ns.print("-------------------------------------------------");
