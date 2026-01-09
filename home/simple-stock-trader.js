@@ -1,9 +1,11 @@
-// VERSION 1.1.0
+// VERSION 1.2.0
 // Simple Stock Trader for BN8 - WSE Account + TIX API Access only
-// Uses price momentum instead of forecast data
+// Uses improved momentum with commission awareness
 
 /** @param {NS} ns */
 export async function main(ns) {
+  ns.disableLog("ALL");
+  
   // ============================================================
   // 1) CONFIGURATION
   // ============================================================
@@ -12,9 +14,9 @@ export async function main(ns) {
   const STOP_LOSS = -0.03;      // Sell when -3% loss
   const MAX_POSITIONS = 5;      // Maximum number of stocks to hold
   const EXPOSURE = 0.80;        // Use 80% of available cash
-  const CYCLE_TIME = 10000;     // 10 seconds between cycles
+  const CYCLE_TIME = 6000;      // 6 seconds (stock update frequency)
+  const COMMISSION = 100000;    // 100k per trade
   
-  // Price history for momentum calculation
   const priceHistory = new Map();
   
   // ============================================================
@@ -22,10 +24,8 @@ export async function main(ns) {
   // ============================================================
   
   ns.tprint("=================================================");
-  ns.tprint("🤖 SIMPLE STOCK TRADER v1.1.0");
-  ns.tprint(`📊 Profit Target: ${(PROFIT_TARGET * 100)}% | Stop Loss: ${(STOP_LOSS * 100)}%`);
-  ns.tprint(`💰 Cash Exposure: ${(EXPOSURE * 100)}%`);
-  ns.tprint(`📈 Max Positions: ${MAX_POSITIONS}`);
+  ns.tprint("🤖 STOCK TRADER v1.2.0 - MOMENTUM MODE");
+  ns.tprint(`📊 Target: ${(PROFIT_TARGET * 100)}% | Stop: ${(STOP_LOSS * 100)}%`);
   ns.tprint("=================================================");
   
   // ============================================================
@@ -58,19 +58,20 @@ export async function main(ns) {
     }
     const history = priceHistory.get(sym);
     history.push(price);
-    if (history.length > 10) {
-      history.shift(); // Keep only last 10 prices
+    if (history.length > 20) {
+      history.shift();
     }
   }
   
-  function getPriceChange(sym) {
+  function getMomentum(sym) {
     const history = priceHistory.get(sym);
-    if (!history || history.length < 2) {
+    if (!history || history.length < 5) {
       return 0;
     }
-    const oldPrice = history[0];
-    const newPrice = history[history.length - 1];
-    return (newPrice - oldPrice) / oldPrice;
+    const recent = history.slice(-5);
+    const oldest = recent[0];
+    const newest = recent[recent.length - 1];
+    return (newest - oldest) / oldest;
   }
   
   // ============================================================
@@ -89,10 +90,10 @@ export async function main(ns) {
       return {
         sym,
         price,
-        priceChange: getPriceChange(sym),
+        momentum: getMomentum(sym),
         position: getPosition(sym)
       };
-    }).sort((a, b) => b.priceChange - a.priceChange);
+    }).sort((a, b) => b.momentum - a.momentum);
     
     // ============================================================
     // 5) SELL POSITIONS (Check existing positions first)
@@ -101,20 +102,26 @@ export async function main(ns) {
     for (const stock of stockData) {
       if (stock.position.shares > 0) {
         const currentReturn = (stock.price - stock.position.avgPrice) / stock.position.avgPrice;
+        let shouldSell = false;
+        let reason = "";
         
-        // Sell if profit target hit or stop loss triggered
-        if (currentReturn >= PROFIT_TARGET || currentReturn <= STOP_LOSS) {
+        if (currentReturn >= PROFIT_TARGET) {
+          shouldSell = true;
+          reason = "PROFIT 💰";
+        } else if (currentReturn <= STOP_LOSS) {
+          shouldSell = true;
+          reason = "STOP LOSS ⚠️";
+        } else if (stock.momentum < 0 && currentReturn > 0.01) {
+          shouldSell = true;
+          reason = "MOMENTUM DROP 📉";
+        }
+        
+        if (shouldSell) {
           const sellPrice = ns.stock.sellStock(stock.sym, stock.position.shares);
-          
           if (sellPrice > 0) {
-            const profit = (sellPrice - stock.position.avgPrice) * stock.position.shares;
-            const profitText = profit >= 0 ? `+${ns.formatNumber(profit)}` : ns.formatNumber(profit);
-            const reason = currentReturn >= PROFIT_TARGET ? "PROFIT" : "STOP LOSS";
-            
-            ns.toast(`💰 ${reason}: ${stock.sym} | P&L: ${profitText}`, "success", 3000);
-            actions.push(`✅ SELL ${stock.sym} | ${reason} | P&L: ${profitText}`);
-          } else {
-            actions.push(`❌ SELL FAILED ${stock.sym}`);
+            const profit = (sellPrice - stock.position.avgPrice) * stock.position.shares - (2 * COMMISSION);
+            actions.push(`✅ SOLD ${stock.sym} | ${reason} | P&L: ${ns.formatNumber(profit)}`);
+            ns.toast(`${stock.sym} ${reason}`, "info");
           }
         }
       }
@@ -129,35 +136,27 @@ export async function main(ns) {
     const availableSlots = MAX_POSITIONS - currentPositions;
     
     if (availableSlots > 0) {
-      const updatedCash = getCash();
-      const budget = updatedCash * EXPOSURE;
+      const budget = getCash() * EXPOSURE;
+      const budgetPerStock = budget / availableSlots;
       
-      // Find buy candidates (no current position + positive momentum)
-      const buyCandidates = stockData
-        .filter(stock => stock.position.shares === 0 && stock.priceChange > 0)
-        .slice(0, availableSlots);
+      const candidates = stockData.filter(s => 
+        s.position.shares === 0 && 
+        s.momentum > 0.005 && // Minimum 0.5% momentum
+        budgetPerStock > (COMMISSION * 10)
+      ).slice(0, availableSlots);
       
-      if (buyCandidates.length > 0 && budget > 0) {
-        const budgetPerStock = budget / buyCandidates.length;
+      for (const stock of candidates) {
+        const maxShares = ns.stock.getMaxShares(stock.sym);
+        const affordableShares = Math.floor((budgetPerStock - COMMISSION) / stock.price);
+        const sharesToBuy = Math.min(affordableShares, maxShares);
         
-        for (const stock of buyCandidates) {
-          const maxShares = ns.stock.getMaxShares(stock.sym);
-          const affordableShares = Math.floor(budgetPerStock / stock.price);
-          const sharesToBuy = Math.min(affordableShares, maxShares);
-          
-          if (sharesToBuy > 0) {
-            const buyPrice = ns.stock.buyStock(stock.sym, sharesToBuy);
-            
-            if (buyPrice > 0) {
-              const cost = buyPrice * sharesToBuy;
-              actions.push(`✅ BUY ${stock.sym} | Shares: ${sharesToBuy} | Cost: ${ns.formatNumber(cost)} | Momentum: ${(stock.priceChange * 100).toFixed(2)}%`);
-            } else {
-              actions.push(`❌ BUY FAILED ${stock.sym}`);
-            }
+        if (sharesToBuy > 0) {
+          const buyPrice = ns.stock.buyStock(stock.sym, sharesToBuy);
+          if (buyPrice > 0) {
+            actions.push(`💸 BOUGHT ${stock.sym} | Momentum: ${(stock.momentum * 100).toFixed(2)}%`);
+            availableSlots--;
           }
         }
-      } else {
-        actions.push(`📊 No buy opportunities (Budget: ${ns.formatNumber(budget)})`);
       }
     }
     
@@ -168,49 +167,33 @@ export async function main(ns) {
     const finalCash = getCash();
     let totalInvested = 0;
     let totalUnrealized = 0;
-    let activeStocks = [];
+
+    
+    // Portfolio calculation moved to display section
+    
+    ns.clearLog();
+    ns.print("📊 MARKET STATUS");
+    ns.print("-------------------------------------------------");
     
     for (const stock of stockData) {
       if (stock.position.shares > 0) {
-        const invested = stock.position.avgPrice * stock.position.shares;
-        const unrealized = getUnrealizedPnL(stock.sym);
+        const val = stock.position.shares * stock.price;
+        const cost = stock.position.shares * stock.position.avgPrice;
+        const pnl = val - cost;
+        totalInvested += cost;
+        totalUnrealized += pnl;
         
-        totalInvested += invested;
-        totalUnrealized += unrealized;
-        
-        const pnlText = unrealized >= 0 ? `+${ns.formatNumber(unrealized)}` : ns.formatNumber(unrealized);
-        const returnPct = ((stock.price - stock.position.avgPrice) / stock.position.avgPrice * 100).toFixed(1);
-        activeStocks.push(`${stock.sym}: ${stock.position.shares} shares | P&L: ${pnlText} (${returnPct}%)`);
+        ns.print(`${stock.sym.padEnd(6)} | Qty: ${ns.formatNumber(stock.position.shares).padEnd(6)} | P&L: ${ns.formatNumber(pnl).padEnd(8)} (${(pnl/cost*100).toFixed(2)}%)`);
       }
     }
     
-    const totalPortfolio = finalCash + totalInvested + totalUnrealized;
-    
-    ns.clearLog();
-    ns.print("=================================================");
-    ns.print("🤖 SIMPLE STOCK TRADER - STATUS");
-    ns.print("=================================================");
+    ns.print("-------------------------------------------------");
     ns.print(`💰 Cash: ${ns.formatNumber(finalCash)}`);
-    ns.print(`📈 Invested: ${ns.formatNumber(totalInvested)}`);
-    ns.print(`📊 Unrealized P&L: ${totalUnrealized >= 0 ? '+' : ''}${ns.formatNumber(totalUnrealized)}`);
-    ns.print(`💎 Total Portfolio: ${ns.formatNumber(totalPortfolio)}`);
-    ns.print(`📋 Active Positions: ${activeStocks.length}/${MAX_POSITIONS}`);
-    ns.print("=================================================");
-    
-    if (activeStocks.length > 0) {
-      ns.print("🏢 ACTIVE POSITIONS:");
-      for (const stock of activeStocks) {
-        ns.print(`  ${stock}`);
-      }
-      ns.print("=================================================");
-    }
+    ns.print(`📦 Total Value: ${ns.formatNumber(finalCash + totalInvested + totalUnrealized)}`);
     
     if (actions.length > 0) {
-      ns.print("⚡ RECENT ACTIONS:");
-      for (const action of actions) {
-        ns.print(`  ${action}`);
-      }
-      ns.print("=================================================");
+      ns.print("⚡ RECENT:");
+      actions.forEach(a => ns.print(`  ${a}`));
     }
     
     await ns.sleep(CYCLE_TIME);
