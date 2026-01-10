@@ -16,6 +16,14 @@
     "source.organizeImports": "explicit"
   },
   "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+  "amazonQ.telemetry": false,
+  "terminal.integrated.profiles.windows": {
+    "bash": {
+      "path": "D:\\Users\\Vianna\\Documents\\workspace\\PortableGit\\bin\\bash.exe",
+      "icon": "terminal-bash"
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "bash"
 }

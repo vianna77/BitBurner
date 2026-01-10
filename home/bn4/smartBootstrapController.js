@@ -556,13 +556,14 @@ export async function main(ns) {
             if (success) {
               ns.print(`${t()} ✅ [NUKE] ${server} rooted.`);
             }
+          }
+
+          if (ns.hasRootAccess(server)) {
             if (ns.getServerMaxMoney(server) > 20000000) {
               ns.exec(CUSTOM_BY_MONEY_SCRIPT, "home", 1, 64);
               ns.exec(RUN_SMARTQ_ON_PSERVERS_SCRIPT, "home", 1);
             }
-          }
 
-          if (ns.hasRootAccess(server)) {
             const reqs = FACTION_REQS[targetAug.faction];
             if (reqs && reqs.backdoor && reqs.backdoor === server && currentHackLvl >= ns.getServerRequiredHackingLevel(server)) {
               await installBackdoor(server);
