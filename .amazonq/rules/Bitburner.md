@@ -52,14 +52,28 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 - **🔪 Crime activities**: Use for sleeve crime assignments
 - **🤖 Sleeves**: Use for referencing sleeves or sleeve-related operations
 
-### 9. Port Communication Documentation
+### 9. Script Header Documentation
+- **All scripts must have header documentation**: Add comments at the beginning of the file (after VERSION) explaining:
+  - Script purpose and what it does
+  - Parameters/arguments (name, type, default values, description)
+  - Dependencies (if any external scripts or special requirements)
+  - Usage examples (optional but recommended)
+
+### 10. Port Communication Documentation
 - **Document port usage**: If the code uses writePort or readPort, add comments at the beginning of the file explaining:
   - Which port numbers are used
   - What values/formats are passed through each port
   - How the ports are used in the communication flow
 
-### 10. External File Usage Documentation
+### 11. External File Usage Documentation
 - **Document exec dependencies**: If external files are used with exec(), add comments in the file header explaining:
   - Which external files are executed
   - The reason for using each external file
   - What functionality each external script provides
+
+## Code Review Process
+
+### 12. Comprehensive Review Requirements
+- **Verify ALL rules**: When performing code reviews, always check compliance with ALL rules defined in this document (rules 1-11)
+- **Automated + Manual**: Use automated tools for technical issues (security, performance, quality) AND manually verify project-specific rules
+- **Report everything**: Present both automated findings and manual compliance checks in the review results
