@@ -11,6 +11,9 @@ export function autocomplete(data, args) {
 /** @param {NS} ns **/
 export async function main(ns) {
   ns.disableLog("ALL");
+  ns.enableLog("hack");
+  ns.enableLog("weaken");
+  ns.enableLog("grow");
 
   // ============================================
   // SIMPLIFIED ARGUMENT VALIDATION
@@ -102,5 +105,3 @@ export async function main(ns) {
     await ns.sleep(500);
   }
 }
-
-
