@@ -17,14 +17,25 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
-  const TARGETS = [
-    "foodnstuff",
-    "sigma-cosmetics",
-    "joesguns",
-    "nectar-net",
-    "hong-fang-tea",
-    "harakiri-sushi"
-  ];
+  // Map stock symbols to server hostnames
+  function getServerFromSymbol(sym) {
+    const org = ns.stock.getOrganization(sym).toLowerCase();
+    return org.replace(/[^a-z0-9]/g, "").replace(/\s+/g, "-");
+  }
+
+  // Get all symbols and filter only those with p-servers
+  const allSymbols = ns.stock.getSymbols();
+  const symbolToServer = {};
+  const TARGETS = [];
+
+  for (const sym of allSymbols) {
+    const server = getServerFromSymbol(sym);
+    const pServer = `p-${server}`;
+    if (ns.serverExists(pServer)) {
+      symbolToServer[sym] = server;
+      TARGETS.push(sym);
+    }
+  }
 
   const PRICE_HISTORY_SIZE = 10;
   const GROW_INFLUENCE_THRESHOLD = 0.01;
@@ -48,25 +59,38 @@ export async function main(ns) {
   }
 
   ns.print("✅ Stock Market access confirmed.");
-  ns.print(`🎯 Monitoring: ${TARGETS.join(", ")}`);
+  ns.print(`🎯 Monitoring ${TARGETS.length} stocks with p-servers`);
+  if (TARGETS.length === 0) {
+    ns.tprint("⚠️ WARNING: No p-servers found for any stocks!");
+    return;
+  }
+
+  ns.print("📋 P-Servers under observation:");
+  for (const sym of TARGETS) {
+    ns.print(`   ${sym} -> p-${symbolToServer[sym]}`);
+  }
 
   const priceHistory = {};
   const stockState = {};
 
-  TARGETS.forEach(t => {
-    priceHistory[t] = [];
-    stockState[t] = State.OBSERVING;
-  });
+  for (const sym of TARGETS) {
+    priceHistory[sym] = [];
+    stockState[sym] = State.OBSERVING;
+  }
 
-  async function getServerActivity(target) {
-    const pServer = `p-${target}`;
+  async function getServerActivity(symbol) {
+    const server = symbolToServer[symbol];
+    if (!server) {
+      return null;
+    }
+    const pServer = `p-${server}`;
     if (!ns.serverExists(pServer)) {
       return null;
     }
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const processes = ns.ps(pServer);
-      
+
       if (processes.length > 0) {
         const isHacking = processes.some(p => p.filename === HACK_SCRIPT);
         const isGrowing = processes.some(p => p.filename === GROW_SCRIPT);
@@ -105,6 +129,26 @@ export async function main(ns) {
     return (recentAvg - oldAvg) / oldAvg;
   }
 
+  function isPriceFalling(sym) {
+    const history = priceHistory[sym];
+    if (history.length < 3) {
+      return false;
+    }
+    const current = history[history.length - 1];
+    const previous = history[history.length - 2];
+    return current < previous;
+  }
+
+  function isPriceRising(sym) {
+    const history = priceHistory[sym];
+    if (history.length < 3) {
+      return false;
+    }
+    const current = history[history.length - 1];
+    const previous = history[history.length - 2];
+    return current > previous;
+  }
+
   function setState(sym, newState) {
     if (stockState[sym] !== newState) {
       ns.print(`🔄 [${sym}] ${stockState[sym]} -> ${newState}`);
@@ -126,7 +170,7 @@ export async function main(ns) {
           const activity = await getServerActivity(target);
 
           if (activity === "HACK") {
-            ns.print(`🔨 [${target}] Detected HACK - Price being pushed down`);
+            ns.print(`🔨 [${target}] Detected HACK - 📉 Price Falling`);
             setState(target, State.HACKING);
           }
           break;
@@ -135,8 +179,14 @@ export async function main(ns) {
         case State.HACKING: {
           const activity = await getServerActivity(target);
 
+          if (isPriceFalling(target)) {
+            ns.print(`⚡⚡⚡ [${target}] TREND CONFIRMED: Price falling as expected! ⚡⚡⚡`);
+          } else if (priceHistory[target].length >= 3) {
+            ns.print(`⚠️⚠️⚠️ [${target}] WARNING: Price NOT falling during HACK! ⚠️⚠️⚠️`);
+          }
+
           if (activity === "GROW") {
-            ns.print(`🌱 [${target}] Detected GROW - Transition to buying`);
+            ns.print(`🌱 [${target}] Detected GROW - 📈 Price Rising`);
             setState(target, State.BUYING);
           } else if (activity === "HACK") {
             ns.print(`📉 [${target}] Still hacking: $${ns.formatNumber(price)} | Mom: ${(momentum * 100).toFixed(2)}%`);
@@ -173,6 +223,12 @@ export async function main(ns) {
           }
 
           const activity = await getServerActivity(target);
+
+          if (activity === "GROW" && isPriceRising(target)) {
+            ns.print(`⚡⚡⚡ [${target}] TREND CONFIRMED: Price rising as expected! ⚡⚡⚡`);
+          } else if (activity === "GROW" && priceHistory[target].length >= 3) {
+            ns.print(`⚠️⚠️⚠️ [${target}] WARNING: Price NOT rising during GROW! ⚠️⚠️⚠️`);
+          }
           const currentReturn = (price - avgPrice) / avgPrice;
           ns.print(`💰 [${target}] Holding ${shares} @ $${ns.formatNumber(price)} | P&L: ${(currentReturn * 100).toFixed(2)}% | Mom: ${(momentum * 100).toFixed(2)}% | Activity: ${activity}`);
 

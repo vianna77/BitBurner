@@ -86,11 +86,22 @@ export async function main(ns) {
   });
 
   const shadowPlayer = (base, hackLevel) => ({
-    ...base,
+    city: base.city,
+    exp: base.exp,
+    hp: base.hp,
+    mults: base.mults,
     skills: {
       ...base.skills,
       hacking: hackLevel
-    }
+    },
+    entropy: base.entropy,
+    factions: base.factions,
+    jobs: base.jobs,
+    karma: base.karma,
+    location: base.location,
+    money: base.money,
+    numPeopleKilled: base.numPeopleKilled,
+    totalPlaytime: base.totalPlaytime
   });
 
   // State machine
