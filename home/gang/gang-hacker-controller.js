@@ -52,8 +52,9 @@ export async function main(ns) {
   const CHA_THRESHOLD = 20;
   const getDynamicAscensionThreshold = (info) => {
     if (info.hack_asc_mult < 10) return 1.6;   // Early game: quick ascensions
-    if (info.hack_asc_mult < 100) return 1.4;  // Mid game: balanced growth
-    return 1.3;                                // Late game: incremental gains
+    if (info.hack_asc_mult < 20) return 1.4;  // Mid game: balanced growth
+    if (info.hack_asc_mult < 30) return 1.3;   // Late game: incremental gains
+    return 1.2;   // Super Late game
   };
 
   const RESPECT_SLOTS = 2;
@@ -209,21 +210,21 @@ export async function main(ns) {
       }
     }
 
-    // Buy vehicles with cost limit
+    // Buy vehicles with cost limit and charisma requirements
     for (const v of VEHICLES) {
       if (info.upgrades.includes(v) || info.augmentations.includes(v)) {
         continue;
       }
-      if (v === "Ford Flex V20" && info.cha >= 20) {
+      if (v === "Ford Flex V20" && info.cha < 20) {
         continue;
       }
-      if (v === "ATX1070 Superbike" && info.cha >= 50) {
+      if (v === "ATX1070 Superbike" && info.cha < 50) {
         continue;
       }
-      if (v === "Mercedes-Benz S9001" && info.cha >= 100) {
+      if (v === "Mercedes-Benz S9001" && info.cha < 100) {
         continue;
       }
-      if (v === "White Ferrari" && info.cha >= 150) {
+      if (v === "White Ferrari" && info.cha < 150) {
         continue;
       }
 
