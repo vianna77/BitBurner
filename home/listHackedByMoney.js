@@ -3,13 +3,13 @@
  * DESCRIPTION:
  * Real-time monitoring of hacked servers with money tracking and visual indicators.
  * Shows current vs max money with color-coded changes and active hacking status.
- * 
+ *
  * FEATURES:
  * - Color-coded money changes (green=increase, red=decrease)
  * - Active hacking detection for local and purchased server scripts
  * - Alternating row colors for better readability
  * - Real-time updates with server state persistence
- * 
+ *
  * USAGE: run listHackedByMoney.js
  */
 
@@ -96,7 +96,7 @@ export async function main(ns) {
 
       if (pServer) {
         flag += " ➡ [OK] ✔ p- server found";
-        const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js"];
+        const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js", "smart/smartMomentumMaker.js"];
         const isRunning = scripts.some(script => ns.isRunning(script, pServer, s.name));
         if (isRunning) {
           flag += " [OK] ✔ hacking!";
