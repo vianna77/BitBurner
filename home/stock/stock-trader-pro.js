@@ -1,25 +1,25 @@
 /** * PRO STOCK TRADER - v3.1
- * DESCRIPTION:
- * Advanced stock trading bot with regime detection and score-weighted allocation.
- * Automatically buys/sells stocks based on forecast and volatility analysis.
- * FIX: Added share limit validation to prevent API rejections.
- * 
- * PORT USAGE:
- * - Port 1: Sends JSON {source: "STOCK", amount: number} when selling stocks for profit tracking
- * 
- * PARAMETERS:
- * - MAX_CAP: Maximum investment capital (e.g., 1e12 for 1 trillion)
- * - ENABLE_SHORT: Enable short selling (true/false)
- * - AGGRESSION: Trading aggression level (0.0 to 1.0)
- * 
- * USAGE: run stocker-trader-pro.js 1000000000000 false 0.7
- */
+* DESCRIPTION:
+* Advanced stock trading bot with regime detection and score-weighted allocation.
+* Automatically buys/sells stocks based on forecast and volatility analysis.
+* FIX: Added share limit validation to prevent API rejections.
+*
+* PORT USAGE:
+* - Port 1: Sends JSON {source: "STOCK", amount: number} when selling stocks for profit tracking
+*
+* PARAMETERS:
+* - MAX_CAP: Maximum investment capital (e.g., 1e12 for 1 trillion)
+* - ENABLE_SHORT: Enable short selling (true/false)
+* - AGGRESSION: Trading aggression level (0.0 to 1.0)
+*
+* USAGE: run stocker-trader-pro.js 1000000000000 false 0.7
+*/
 export async function main(ns) {
   ns.disableLog("ALL");
 
   // Check if script is already running
   const runningProcesses = ns.ps("home").filter(p =>
-    p.filename === "stocker-trader-pro.js" && p.pid !== ns.pid
+    p.filename === "/stock/stocker-trader-pro.js" && p.pid !== ns.pid
   );
 
   if (runningProcesses.length > 0) {
