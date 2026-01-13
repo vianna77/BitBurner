@@ -1,4 +1,4 @@
-// VERSION 1.0.0
+// VERSION 1.1.0
 /**
  * Sleeve Task Dispatcher
  * Opens a popup to select an activity and applies it to all sleeves.
@@ -6,6 +6,8 @@
  * Activities supported:
  * - Crime: Commits a selected crime
  * - Gym: Trains a selected stat at a selected gym
+ * - University: Studies a selected course at a selected university
+ * - Travel: Travels all sleeves to a selected city
  * - Shock Recovery: Recovers from shock
  * - Synchronize: Increases synchronization
  * 
@@ -23,7 +25,7 @@ export async function main(ns) {
 
   const activityType = await ns.prompt("Select activity type for ALL sleeves:", {
     type: "select",
-    choices: ["Crime", "Gym", "Shock Recovery", "Synchronize"]
+    choices: ["Crime", "Gym", "University", "Travel", "Shock Recovery", "Synchronize"]
   });
 
   if (!activityType) {
@@ -83,6 +85,57 @@ export async function main(ns) {
       }
     }
     details = `${selectedStat} at ${selectedGym}`;
+
+  } else if (activityType === "University") {
+    const universities = ["Summit University", "Rothman University", "ZB Institute of Technology"];
+    const courses = ["Study Computer Science", "Data Structures", "Networks", "Algorithms", "Management", "Leadership"];
+
+    const selectedUniversity = await ns.prompt("Select university:", {
+      type: "select",
+      choices: universities
+    });
+
+    if (!selectedUniversity) {
+      ns.tprint("🟡 Operation cancelled.");
+      return;
+    }
+
+    const selectedCourse = await ns.prompt("Select course:", {
+      type: "select",
+      choices: courses
+    });
+
+    if (!selectedCourse) {
+      ns.tprint("🟡 Operation cancelled.");
+      return;
+    }
+
+    for (let i = 0; i < numSleeves; i++) {
+      if (ns.sleeve.setToUniversityCourse(i, selectedUniversity, selectedCourse)) {
+        count++;
+      }
+    }
+    details = `${selectedCourse} at ${selectedUniversity}`;
+
+  } else if (activityType === "Travel") {
+    const cities = ["Aevum", "Chongqing", "Sector-12", "New Tokyo", "Ishima", "Volhaven"];
+
+    const selectedCity = await ns.prompt("Select destination city:", {
+      type: "select",
+      choices: cities
+    });
+
+    if (!selectedCity) {
+      ns.tprint("🟡 Operation cancelled.");
+      return;
+    }
+
+    for (let i = 0; i < numSleeves; i++) {
+      if (ns.sleeve.travel(i, selectedCity)) {
+        count++;
+      }
+    }
+    details = `Travel to ${selectedCity}`;
 
   } else if (activityType === "Shock Recovery") {
     for (let i = 0; i < numSleeves; i++) {
