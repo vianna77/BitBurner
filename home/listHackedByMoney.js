@@ -1,5 +1,5 @@
 /**
- * SERVER MONITOR - v1.3.1
+ * SERVER MONITOR - v1.4.0
  * DESCRIPTION:
  * Real-time monitoring of hacked servers with money tracking and visual indicators.
  * Shows current vs max money with color-coded changes and active hacking status.
@@ -38,6 +38,7 @@ export async function main(ns) {
   const reset = "\u001b[0m";
 
   const serverDatabase = {};
+  const symbolCache = new Map();
 
   while (true) {
     ns.clearLog();
@@ -56,7 +57,7 @@ export async function main(ns) {
     // 2 — Sorting by Max Money
     hacked.sort((a, b) => a.maxMoney - b.maxMoney);
 
-    ns.print("--- SERVER MONITOR v1.3.1 (Single Object State) ---");
+    ns.print("--- SERVER MONITOR v1.4.0 (Single Object State) ---");
     ns.print("----------------------------------------------------------------------------------");
 
     let id = 1;
@@ -103,13 +104,34 @@ export async function main(ns) {
         }
       }
 
+      // Get stock symbol if available
+      let symbol = "";
+      try {
+        if (!symbolCache.has(s.name)) {
+          const allSymbols = ns.stock.getSymbols();
+          for (const sym of allSymbols) {
+            if (ns.stock.getOrganization(sym) === s.name) {
+              symbolCache.set(s.name, sym);
+              break;
+            }
+          }
+        }
+        const stockSymbol = symbolCache.get(s.name);
+        if (stockSymbol) {
+          symbol = ` [${stockSymbol}]`;
+        }
+      } catch (e) {
+        // TIX API not available or error occurred
+      }
+
       // ID Background Color Logic: Odd = Cyan, Even = Blue
       const idBgColor = (id % 2 !== 0) ? bgCyan : bgBlue;
       const idStr = `${id}.`.padEnd(4);
+      const serverName = `${s.name}${symbol}`.padEnd(27);
       const moneyStr = `$${ns.formatNumber(s.currentMoney)} / $${ns.formatNumber(s.maxMoney)}`.padEnd(25);
 
       // Print with alternating background for ID and entry color for the rest
-      ns.print(`${idBgColor}${idStr}${reset} ${entry.color}${s.name.padEnd(20)}: ${moneyStr}${reset}${flag}`);
+      ns.print(`${idBgColor}${idStr}${reset} ${entry.color}${serverName}: ${moneyStr}${reset}${flag}`);
       id++;
     }
 

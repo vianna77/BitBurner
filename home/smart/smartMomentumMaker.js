@@ -1,15 +1,15 @@
 /**
- * VERSION: 6.0.1
+ * VERSION: 8.1.0
  * Smart Momentum Maker
  *
  * DESCRIPTION:
  * Optimized for stock market manipulation by creating clear price trends.
- * Uses RAM-aware thread calculation for maximum efficiency.
+ * Uses shadow objects for precise calculations and single large executions.
  *
  * STRATEGY:
- * 1. Weaken to minimum security
- * 2. HACK PHASE: Calculate optimal hack+weaken threads, use all available RAM
- * 3. GROW PHASE: Calculate optimal grow+weaken threads, use all available RAM
+ * 1. WEAKEN: Reduce security to minimum
+ * 2. HACK: Drain money for 10 minutes (stock price drops)
+ * 3. GROW: Fill money back up (stock price rises)
  * 4. Loop
  *
  * PARAMETERS:
@@ -17,8 +17,6 @@
  *
  * PORT USAGE:
  * - Port 80: Sends {target: "servername", phase: "HACK"/"GROW"} on state transitions only
- *   - GROW→HACK transition: Sends "HACK" (stock should sell, price will drop)
- *   - HACK→GROW transition: Sends "GROW" (stock should buy, price will rise)
  *
  * USAGE: run smart/smartMomentumMaker.js <target>
  */
@@ -35,6 +33,12 @@ const GROW_PATH = "/smart/basic-grow.js";
 const HACK_SECURITY = 0.002;
 const GROW_SECURITY = 0.004;
 const WEAKEN_SECURITY = 0.05;
+
+const STATE = {
+  WEAKEN: "WEAKEN",
+  HACK: "HACK",
+  GROW: "GROW"
+};
 
 /** @param {NS} ns **/
 export async function main(ns) {
@@ -53,8 +57,6 @@ export async function main(ns) {
     return `[${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}]`;
   };
 
-  ns.tprint(`${t()} [DEBUG] target=${target} | thisServer=${thisServer}`);
-
   if (!ns.fileExists(HACK_PATH) || !ns.fileExists(WEAKEN_PATH) || !ns.fileExists(GROW_PATH)) {
     ns.tprint(`${t()} ❌ FATAL ERROR: Missing scripts in /smart/ directory.`);
     return;
@@ -72,157 +74,180 @@ export async function main(ns) {
   const getS = () => ns.getServer(target);
   const getP = () => ns.getPlayer();
 
+  const shadowServer = (base, money, security) => ({
+    ...base,
+    moneyAvailable: money,
+    hackDifficulty: security
+  });
+
+  const shadowPlayer = (base, hackLevel) => ({
+    city: base.city,
+    exp: base.exp,
+    hp: base.hp,
+    mults: base.mults,
+    skills: {
+      ...base.skills,
+      hacking: hackLevel
+    },
+    entropy: base.entropy,
+    factions: base.factions,
+    jobs: base.jobs,
+    karma: base.karma,
+    location: base.location,
+    money: base.money,
+    numPeopleKilled: base.numPeopleKilled,
+    totalPlaytime: base.totalPlaytime
+  });
+
   function isScriptRunning(scriptPath) {
     return ns.ps(thisServer).some(p => p.filename === scriptPath);
   }
 
-  async function waitForScriptsToFinish(scriptPath) {
-    while (isScriptRunning(scriptPath)) {
-      await ns.sleep(500);
-    }
-  }
-
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
 
-  let currentState = "HACK";
+  let currentState = STATE.HACK;
   let hackPhaseStartTime = Date.now();
 
   while (true) {
-    ns.print(`${t()} Starting loop... again.`);
     const s = getS();
     const money = s.moneyAvailable;
     const maxMoney = s.moneyMax;
     const sec = s.hackDifficulty;
     const minSec = s.minDifficulty;
 
-    ns.print(`${t()} [VALUES] money=${ns.formatNumber(money)}/${ns.formatNumber(maxMoney)} (${(money / maxMoney * 100).toFixed(1)}%) | sec=${sec.toFixed(2)}/${minSec.toFixed(2)}`);
+    ns.print(`${t()} [STATE=${currentState}] money=${ns.formatNumber(money)}/${ns.formatNumber(maxMoney)} (${(money / maxMoney * 100).toFixed(1)}%) | sec=${sec.toFixed(2)}/${minSec.toFixed(2)}`);
 
-    // PHASE 1: WEAKEN TO MINIMUM
+    // Check if security needs fixing first
     if (sec > minSec + 5) {
-      ns.print(`${t()} [WEAKEN] Sec: ${sec.toFixed(2)} > Min: ${minSec.toFixed(2)}`);
-      const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-      const threads = Math.floor(freeRam / weakenRam);
-
-      if (threads > 0) {
-        ns.exec(WEAKEN_PATH, thisServer, threads, target, Date.now());
-        await ns.sleep(2000);
-      } else {
-        await ns.sleep(5000);
-      }
-      continue;
-    } else {
-      ns.print(`${t()} [DEBUG] WEAKEN SKIP: sec=${sec.toFixed(2)} <= minSec+5=${(minSec + 5).toFixed(2)}`);
+      currentState = STATE.WEAKEN;
     }
 
-    // PHASE 2: HACK PHASE (drain money)
-    if (currentState === "HACK") {
-      if (isScriptRunning(GROW_PATH)) {
-        ns.print(`${t()} ⏳ [WAITING] Waiting for GROW scripts to finish...`);
-        await waitForScriptsToFinish(GROW_PATH);
-        ns.print(`${t()} ✅ [READY] All GROW scripts finished. Starting HACK phase.`);
+    switch (currentState) {
+      case STATE.WEAKEN: {
+        if (isScriptRunning(HACK_PATH) || isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
+          await ns.sleep(2000);
+          break;
+        }
+
+        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+        const threads = Math.floor(freeRam / weakenRam);
+
+        if (threads > 0) {
+          ns.print(`${t()} 🔒 [WEAKEN] Executing ${threads} threads`);
+          ns.exec(WEAKEN_PATH, thisServer, threads, target, Date.now());
+        }
+
+        while (isScriptRunning(WEAKEN_PATH)) {
+          await ns.sleep(2000);
+        }
+
+        if (sec <= minSec + 5) {
+          currentState = STATE.HACK;
+        }
+        break;
       }
 
-      const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-      const player = getP();
+      case STATE.HACK: {
+        if (isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH) || isScriptRunning(HACK_PATH)) {
+          await ns.sleep(2000);
+          break;
+        }
 
-      const hackPercent = ns.formulas.hacking.hackPercent(s, player);
-      const stealRatio = 0.5;
-      const hackIdeal = Math.max(1, Math.floor(stealRatio / hackPercent));
-      const weakenIdeal = Math.max(1, Math.ceil((hackIdeal * HACK_SECURITY) / WEAKEN_SECURITY));
+        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+        const realPlayer = getP();
+        const realServer = getS();
+        const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+        const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
 
-      const maxHackThreads = Math.floor(freeRam / hackRam);
-      const hackThreads = Math.min(hackIdeal, maxHackThreads);
-      const hackRamUsed = hackThreads * hackRam;
-      const ramLeftAfterHack = freeRam - hackRamUsed;
-      const maxWeakenThreads = Math.floor(ramLeftAfterHack / weakenRam);
-      const weakenThreads = Math.min(weakenIdeal, maxWeakenThreads);
+        const hackPercent = ns.formulas.hacking.hackPercent(optimalServer, optimalPlayer);
+        const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
+        const hackThreads = Math.max(1, maxPossibleHackThreads);
+        const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY));
+        const totalRamUsed = (hackThreads * hackRam) + (weakenThreads * weakenRam);
 
-      const totalRamUsed = hackRamUsed + (weakenThreads * weakenRam);
-
-      if (hackThreads > 0 && weakenThreads > 0) {
-        ns.print(`${t()} 📉 [HACK PHASE] H=${hackThreads}/${hackIdeal} W=${weakenThreads}/${weakenIdeal} (${ns.formatRam(totalRamUsed)}) | Money: ${ns.formatNumber(money)} / ${ns.formatNumber(maxMoney)}`);
+        ns.print(`${t()} 📉 [HACK] H=${hackThreads} W=${weakenThreads} RAM=${ns.formatRam(totalRamUsed)}`);
 
         ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
         ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
 
-        ns.print(`${t()} ⏳ [HACK PHASE] Waiting for completion...`);
-        await waitForScriptsToFinish(HACK_PATH);
+        while (isScriptRunning(HACK_PATH) || isScriptRunning(WEAKEN_PATH)) {
+          await ns.sleep(2000);
+        }
+
         const afterHackMoney = getS().moneyAvailable;
-        const afterHackPercent = (afterHackMoney / maxMoney * 100).toFixed(1);
-        ns.print(`${t()} ✅ [HACK PHASE] Complete! Money after: ${ns.formatNumber(afterHackMoney)} / ${ns.formatNumber(maxMoney)} (${afterHackPercent}%)`);
+        ns.print(`${t()} ✅ [HACK] Complete! Money: ${ns.formatNumber(afterHackMoney)}`);
+
         if (afterHackMoney < maxMoney * 0.1 && (Date.now() - hackPhaseStartTime > 600000)) {
-          currentState = "GROW";
+          currentState = STATE.GROW;
           hackPhaseStartTime = 0;
           ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
-          ns.print(`${t()} 🔄 [STATE TRANSITION] HACK → GROW | 📡 Sent GROW to port 80`);
+          ns.print(`${t()} 🔄 [TRANSITION] HACK → GROW`);
         }
-      } else if (hackThreads > 0) {
-        ns.print(`${t()} ⚠️ [HACK PHASE] Only hack fits - H=${hackThreads}/${hackIdeal}`);
-        ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
-        await waitForScriptsToFinish(HACK_PATH);
-      } else {
-        ns.print(`${t()} ❌ Not enough RAM for hack phase`);
-        await ns.sleep(5000);
+        break;
       }
-      continue;
-    } else {
-      ns.print(`${t()} [DEBUG] HACK SKIP: currentState=${currentState}`);
+
+      case STATE.GROW: {
+        if (isScriptRunning(HACK_PATH) || isScriptRunning(WEAKEN_PATH) || isScriptRunning(GROW_PATH)) {
+          await ns.sleep(2000);
+          break;
+        }
+
+        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+        const realPlayer = getP();
+        const realServer = getS();
+        const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+        const currentServerForGrow = shadowServer(realServer, realServer.moneyAvailable, realServer.minDifficulty);
+
+        const growIdeal = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(currentServerForGrow, optimalPlayer, maxMoney)));
+        const weakenIdeal = Math.max(1, Math.ceil((growIdeal * GROW_SECURITY) / WEAKEN_SECURITY));
+        const totalIdealRam = (growIdeal * growRam) + (weakenIdeal * weakenRam);
+
+        let growThreads, weakenThreads;
+        if (totalIdealRam <= freeRam) {
+          growThreads = growIdeal;
+          weakenThreads = weakenIdeal;
+        } else {
+          const maxGrowThreads = Math.floor(freeRam / growRam);
+          growThreads = Math.min(growIdeal, maxGrowThreads);
+          const growRamUsed = growThreads * growRam;
+          const ramLeftAfterGrow = freeRam - growRamUsed;
+          const maxWeakenThreads = Math.floor(ramLeftAfterGrow / weakenRam);
+          weakenThreads = Math.min(weakenIdeal, maxWeakenThreads);
+        }
+
+        if (growThreads > 0 && weakenThreads > 0) {
+          const totalRamUsed = (growThreads * growRam) + (weakenThreads * weakenRam);
+          ns.print(`${t()} 📈 [GROW] G=${growThreads}/${growIdeal} W=${weakenThreads}/${weakenIdeal} RAM=${ns.formatRam(totalRamUsed)}`);
+
+          ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
+          ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
+
+          while (isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
+            await ns.sleep(2000);
+          }
+
+          const afterGrowMoney = getS().moneyAvailable;
+          ns.print(`${t()} ✅ [GROW] Complete! Money: ${ns.formatNumber(afterGrowMoney)}`);
+
+          if (afterGrowMoney >= maxMoney * 0.95) {
+            currentState = STATE.HACK;
+            hackPhaseStartTime = Date.now();
+            ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
+            ns.print(`${t()} 🔄 [TRANSITION] GROW → HACK`);
+          }
+        } else if (growThreads > 0) {
+          ns.print(`${t()} ⚠️ [GROW] Only grow fits - G=${growThreads}`);
+          ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
+          while (isScriptRunning(GROW_PATH)) {
+            await ns.sleep(2000);
+          }
+        } else {
+          await ns.sleep(5000);
+        }
+        break;
+      }
     }
 
-    // PHASE 3: GROW PHASE (fill money)
-    if (currentState === "GROW") {
-      if (isScriptRunning(HACK_PATH)) {
-        ns.print(`${t()} ⏳ [WAITING] Waiting for HACK scripts to finish...`);
-        await waitForScriptsToFinish(HACK_PATH);
-        ns.print(`${t()} ✅ [READY] All HACK scripts finished. Starting GROW phase.`);
-      }
-
-      const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-      const player = getP();
-
-      const growIdeal = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(s, player, maxMoney)));
-      const weakenIdeal = Math.max(1, Math.ceil((growIdeal * GROW_SECURITY) / WEAKEN_SECURITY));
-
-      const maxGrowThreads = Math.floor(freeRam / growRam);
-      const growThreads = Math.min(growIdeal, maxGrowThreads);
-      const growRamUsed = growThreads * growRam;
-
-      const ramLeftAfterGrow = freeRam - growRamUsed;
-      const maxWeakenThreads = Math.floor(ramLeftAfterGrow / weakenRam);
-      const weakenThreads = Math.min(weakenIdeal, maxWeakenThreads);
-
-      const totalRamUsed = growRamUsed + (weakenThreads * weakenRam);
-
-      if (growThreads > 0 && weakenThreads > 0) {
-        ns.print(`${t()} 📈 [GROW PHASE] G=${growThreads}/${growIdeal} W=${weakenThreads}/${weakenIdeal} (${ns.formatRam(totalRamUsed)}) | Money: ${ns.formatNumber(money)} / ${ns.formatNumber(maxMoney)}`);
-
-        ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
-        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
-
-        ns.print(`${t()} ⏳ [GROW PHASE] Waiting for completion...`);
-        await waitForScriptsToFinish(GROW_PATH);
-        const afterGrowMoney = getS().moneyAvailable;
-        const afterGrowPercent = (afterGrowMoney / maxMoney * 100).toFixed(1);
-        ns.print(`${t()} ✅ [GROW PHASE] Complete! Money after: ${ns.formatNumber(afterGrowMoney)} / ${ns.formatNumber(maxMoney)} (${afterGrowPercent}%)`);
-        if (afterGrowMoney >= maxMoney * 0.95) {
-          currentState = "HACK";
-          hackPhaseStartTime = Date.now();
-          ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
-          ns.print(`${t()} 🔄 [STATE TRANSITION] GROW → HACK | 📡 Sent HACK to port 80`);
-        }
-      } else if (growThreads > 0) {
-        ns.print(`${t()} ⚠️ [GROW PHASE] Only grow fits - G=${growThreads}/${growIdeal}`);
-        ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
-        await waitForScriptsToFinish(GROW_PATH);
-      } else {
-        ns.print(`${t()} ❌ Not enough RAM for grow phase`);
-        await ns.sleep(5000);
-      }
-      continue;
-    } else {
-      ns.print(`${t()} [DEBUG] GROW SKIP: currentState=${currentState}`);
-    }
-
-    await ns.sleep(1000);
+    await ns.sleep(2000);
   }
 }
