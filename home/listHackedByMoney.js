@@ -108,9 +108,11 @@ export async function main(ns) {
       let symbol = "";
       try {
         if (!symbolCache.has(s.name)) {
+          const serverInfo = ns.getServer(s.name);
+          const orgName = serverInfo.organizationName;
           const allSymbols = ns.stock.getSymbols();
           for (const sym of allSymbols) {
-            if (ns.stock.getOrganization(sym) === s.name) {
+            if (ns.stock.getOrganization(sym) === orgName) {
               symbolCache.set(s.name, sym);
               break;
             }

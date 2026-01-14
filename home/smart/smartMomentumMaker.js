@@ -1,5 +1,5 @@
 /**
- * VERSION: 8.4.0
+ * VERSION: 8.5.0
  * Smart Momentum Maker
  *
  * DESCRIPTION:
@@ -107,6 +107,7 @@ export async function main(ns) {
 
   let currentState = STATE.HACK;
   let hackPhaseStartTime = Date.now();
+  let growPhaseStartTime = 0;
 
   while (true) {
     const s = getS();
@@ -159,6 +160,7 @@ export async function main(ns) {
 
         if (sec <= minSec + 5) {
           currentState = STATE.HACK;
+          hackPhaseStartTime = Date.now();
         }
         break;
       }
@@ -208,6 +210,7 @@ export async function main(ns) {
 
         if (afterHackMoney < maxMoney * 0.1 && (Date.now() - hackPhaseStartTime > 600000)) {
           currentState = STATE.GROW;
+          growPhaseStartTime = Date.now();
           hackPhaseStartTime = 0;
           ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
           ns.print(`${t()} 🔄 [TRANSITION] HACK → GROW`);
@@ -276,8 +279,9 @@ export async function main(ns) {
           const afterGrowMoney = getS().moneyAvailable;
           ns.print(`${t()} ✅ [GROW] Complete! Money: ${ns.formatNumber(afterGrowMoney)}`);
 
-          if (afterGrowMoney >= maxMoney * 0.95) {
+          if (afterGrowMoney >= maxMoney * 0.95 && (Date.now() - growPhaseStartTime > 600000)) {
             currentState = STATE.HACK;
+            growPhaseStartTime = 0;
             hackPhaseStartTime = Date.now();
             ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
             ns.print(`${t()} 🔄 [TRANSITION] GROW → HACK`);
