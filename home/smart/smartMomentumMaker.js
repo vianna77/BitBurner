@@ -1,5 +1,5 @@
 /**
- * VERSION: 6.0.0
+ * VERSION: 6.0.1
  * Smart Momentum Maker
  *
  * DESCRIPTION:
@@ -85,6 +85,7 @@ export async function main(ns) {
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
 
   let currentState = "HACK";
+  let hackPhaseStartTime = Date.now();
 
   while (true) {
     ns.print(`${t()} Starting loop... again.`);
@@ -149,8 +150,9 @@ export async function main(ns) {
         const afterHackMoney = getS().moneyAvailable;
         const afterHackPercent = (afterHackMoney / maxMoney * 100).toFixed(1);
         ns.print(`${t()} ✅ [HACK PHASE] Complete! Money after: ${ns.formatNumber(afterHackMoney)} / ${ns.formatNumber(maxMoney)} (${afterHackPercent}%)`);
-        if (afterHackMoney < maxMoney * 0.1) {
+        if (afterHackMoney < maxMoney * 0.1 && (Date.now() - hackPhaseStartTime > 600000)) {
           currentState = "GROW";
+          hackPhaseStartTime = 0;
           ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
           ns.print(`${t()} 🔄 [STATE TRANSITION] HACK → GROW | 📡 Sent GROW to port 80`);
         }
@@ -204,6 +206,7 @@ export async function main(ns) {
         ns.print(`${t()} ✅ [GROW PHASE] Complete! Money after: ${ns.formatNumber(afterGrowMoney)} / ${ns.formatNumber(maxMoney)} (${afterGrowPercent}%)`);
         if (afterGrowMoney >= maxMoney * 0.95) {
           currentState = "HACK";
+          hackPhaseStartTime = Date.now();
           ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
           ns.print(`${t()} 🔄 [STATE TRANSITION] GROW → HACK | 📡 Sent HACK to port 80`);
         }
