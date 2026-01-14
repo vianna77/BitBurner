@@ -103,7 +103,7 @@ export async function main(ns) {
     }
 
     // PHASE 2: HACK PHASE (drain money)
-    if (money > maxMoney * 0.1) {
+    if (money >= maxMoney * 0.95) {
       if (isScriptRunning(GROW_PATH)) {
         ns.print(`${t()} ⏳ [WAITING] Waiting for GROW scripts to finish...`);
         await waitForScriptsToFinish(GROW_PATH);
@@ -152,7 +152,7 @@ export async function main(ns) {
     }
 
     // PHASE 3: GROW PHASE (fill money)
-    if (money < maxMoney * 0.95) {
+    if (money < maxMoney * 0.1) {
       if (isScriptRunning(HACK_PATH)) {
         ns.print(`${t()} ⏳ [WAITING] Waiting for HACK scripts to finish...`);
         await waitForScriptsToFinish(HACK_PATH);
