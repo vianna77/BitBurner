@@ -1,5 +1,5 @@
 /**
- * VERSION: 8.1.0
+ * VERSION: 8.4.0
  * Smart Momentum Maker
  *
  * DESCRIPTION:
@@ -133,12 +133,28 @@ export async function main(ns) {
         const threads = Math.floor(freeRam / weakenRam);
 
         if (threads > 0) {
+          const realPlayer = getP();
+          const realServer = getS();
+          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+          const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
+
           ns.print(`${t()} 🔒 [WEAKEN] Executing ${threads} threads`);
           ns.exec(WEAKEN_PATH, thisServer, threads, target, Date.now());
-        }
 
-        while (isScriptRunning(WEAKEN_PATH)) {
-          await ns.sleep(2000);
+          const duration = weakenTime + 500;
+          ns.print(`${t()} ⏳ [WEAKEN] Waiting ${(duration / 1000).toFixed(1)}s...`);
+          await ns.sleep(duration);
+
+          let waitCount = 0;
+          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+          while (currentProcesses.length > 0 && waitCount < 10) {
+            ns.print(`${t()} 🟡 [WEAKEN] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
+            await ns.sleep(1000);
+            waitCount++;
+            currentProcesses.splice(0);
+            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
+          }
         }
 
         if (sec <= minSec + 5) {
@@ -160,6 +176,9 @@ export async function main(ns) {
         const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
 
         const hackPercent = ns.formulas.hacking.hackPercent(optimalServer, optimalPlayer);
+        const hackTime = ns.formulas.hacking.hackTime(optimalServer, optimalPlayer);
+        const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
+
         const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
         const hackThreads = Math.max(1, maxPossibleHackThreads);
         const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY));
@@ -170,8 +189,18 @@ export async function main(ns) {
         ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
         ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
 
-        while (isScriptRunning(HACK_PATH) || isScriptRunning(WEAKEN_PATH)) {
-          await ns.sleep(2000);
+        const duration = Math.max(hackTime, weakenTime) + 500;
+        ns.print(`${t()} ⏳ [HACK] Waiting ${(duration / 1000).toFixed(1)}s...`);
+        await ns.sleep(duration);
+
+        let waitCount = 0;
+        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+        while (currentProcesses.length > 0 && waitCount < 10) {
+          ns.print(`${t()} 🟡 [HACK] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
+          await ns.sleep(1000);
+          waitCount++;
+          currentProcesses.splice(0);
+          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
         }
 
         const afterHackMoney = getS().moneyAvailable;
@@ -216,14 +245,32 @@ export async function main(ns) {
         }
 
         if (growThreads > 0 && weakenThreads > 0) {
+          const realPlayer = getP();
+          const realServer = getS();
+          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+
+          const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
+          const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
+
           const totalRamUsed = (growThreads * growRam) + (weakenThreads * weakenRam);
           ns.print(`${t()} 📈 [GROW] G=${growThreads}/${growIdeal} W=${weakenThreads}/${weakenIdeal} RAM=${ns.formatRam(totalRamUsed)}`);
 
           ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
           ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
 
-          while (isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
-            await ns.sleep(2000);
+          const duration = Math.max(growTime, weakenTime) + 500;
+          ns.print(`${t()} ⏳ [GROW] Waiting ${(duration / 1000).toFixed(1)}s...`);
+          await ns.sleep(duration);
+
+          let waitCount = 0;
+          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+          while (currentProcesses.length > 0 && waitCount < 10) {
+            ns.print(`${t()} 🟡 [GROW] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
+            await ns.sleep(1000);
+            waitCount++;
+            currentProcesses.splice(0);
+            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
           }
 
           const afterGrowMoney = getS().moneyAvailable;
@@ -236,10 +283,25 @@ export async function main(ns) {
             ns.print(`${t()} 🔄 [TRANSITION] GROW → HACK`);
           }
         } else if (growThreads > 0) {
-          ns.print(`${t()} ⚠️ [GROW] Only grow fits - G=${growThreads}`);
+          const realPlayer = getP();
+          const realServer = getS();
+          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+          const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
+
+          ns.print(`${t()} 🟡 [GROW] Only grow fits - G=${growThreads}`);
           ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
-          while (isScriptRunning(GROW_PATH)) {
-            await ns.sleep(2000);
+
+          const duration = growTime + 500;
+          await ns.sleep(duration);
+
+          let waitCount = 0;
+          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+          while (currentProcesses.length > 0 && waitCount < 10) {
+            await ns.sleep(1000);
+            waitCount++;
+            currentProcesses.splice(0);
+            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
           }
         } else {
           await ns.sleep(5000);
