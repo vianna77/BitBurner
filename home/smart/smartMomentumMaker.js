@@ -1,5 +1,5 @@
 /**
- * VERSION: 4.0.0
+ * VERSION: 6.0.0
  * Smart Momentum Maker
  *
  * DESCRIPTION:
@@ -16,7 +16,9 @@
  * - target: Server hostname to manipulate
  *
  * PORT USAGE:
- * - Port 80: Sends {target: "servername", phase: "HACK"/"GROW"} notifications
+ * - Port 80: Sends {target: "servername", phase: "HACK"/"GROW"} on state transitions only
+ *   - GROW→HACK transition: Sends "HACK" (stock should sell, price will drop)
+ *   - HACK→GROW transition: Sends "GROW" (stock should buy, price will rise)
  *
  * USAGE: run smart/smartMomentumMaker.js <target>
  */
@@ -51,6 +53,8 @@ export async function main(ns) {
     return `[${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}]`;
   };
 
+  ns.tprint(`${t()} [DEBUG] target=${target} | thisServer=${thisServer}`);
+
   if (!ns.fileExists(HACK_PATH) || !ns.fileExists(WEAKEN_PATH) || !ns.fileExists(GROW_PATH)) {
     ns.tprint(`${t()} ❌ FATAL ERROR: Missing scripts in /smart/ directory.`);
     return;
@@ -80,12 +84,17 @@ export async function main(ns) {
 
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
 
+  let currentState = "HACK";
+
   while (true) {
+    ns.print(`${t()} Starting loop... again.`);
     const s = getS();
     const money = s.moneyAvailable;
     const maxMoney = s.moneyMax;
     const sec = s.hackDifficulty;
     const minSec = s.minDifficulty;
+
+    ns.print(`${t()} [VALUES] money=${ns.formatNumber(money)}/${ns.formatNumber(maxMoney)} (${(money / maxMoney * 100).toFixed(1)}%) | sec=${sec.toFixed(2)}/${minSec.toFixed(2)}`);
 
     // PHASE 1: WEAKEN TO MINIMUM
     if (sec > minSec + 5) {
@@ -100,10 +109,12 @@ export async function main(ns) {
         await ns.sleep(5000);
       }
       continue;
+    } else {
+      ns.print(`${t()} [DEBUG] WEAKEN SKIP: sec=${sec.toFixed(2)} <= minSec+5=${(minSec + 5).toFixed(2)}`);
     }
 
     // PHASE 2: HACK PHASE (drain money)
-    if (money >= maxMoney * 0.95) {
+    if (currentState === "HACK") {
       if (isScriptRunning(GROW_PATH)) {
         ns.print(`${t()} ⏳ [WAITING] Waiting for GROW scripts to finish...`);
         await waitForScriptsToFinish(GROW_PATH);
@@ -121,7 +132,6 @@ export async function main(ns) {
       const maxHackThreads = Math.floor(freeRam / hackRam);
       const hackThreads = Math.min(hackIdeal, maxHackThreads);
       const hackRamUsed = hackThreads * hackRam;
-
       const ramLeftAfterHack = freeRam - hackRamUsed;
       const maxWeakenThreads = Math.floor(ramLeftAfterHack / weakenRam);
       const weakenThreads = Math.min(weakenIdeal, maxWeakenThreads);
@@ -129,7 +139,6 @@ export async function main(ns) {
       const totalRamUsed = hackRamUsed + (weakenThreads * weakenRam);
 
       if (hackThreads > 0 && weakenThreads > 0) {
-        ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
         ns.print(`${t()} 📉 [HACK PHASE] H=${hackThreads}/${hackIdeal} W=${weakenThreads}/${weakenIdeal} (${ns.formatRam(totalRamUsed)}) | Money: ${ns.formatNumber(money)} / ${ns.formatNumber(maxMoney)}`);
 
         ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
@@ -140,6 +149,11 @@ export async function main(ns) {
         const afterHackMoney = getS().moneyAvailable;
         const afterHackPercent = (afterHackMoney / maxMoney * 100).toFixed(1);
         ns.print(`${t()} ✅ [HACK PHASE] Complete! Money after: ${ns.formatNumber(afterHackMoney)} / ${ns.formatNumber(maxMoney)} (${afterHackPercent}%)`);
+        if (afterHackMoney < maxMoney * 0.1) {
+          currentState = "GROW";
+          ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
+          ns.print(`${t()} 🔄 [STATE TRANSITION] HACK → GROW | 📡 Sent GROW to port 80`);
+        }
       } else if (hackThreads > 0) {
         ns.print(`${t()} ⚠️ [HACK PHASE] Only hack fits - H=${hackThreads}/${hackIdeal}`);
         ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
@@ -149,10 +163,12 @@ export async function main(ns) {
         await ns.sleep(5000);
       }
       continue;
+    } else {
+      ns.print(`${t()} [DEBUG] HACK SKIP: currentState=${currentState}`);
     }
 
     // PHASE 3: GROW PHASE (fill money)
-    if (money < maxMoney * 0.1) {
+    if (currentState === "GROW") {
       if (isScriptRunning(HACK_PATH)) {
         ns.print(`${t()} ⏳ [WAITING] Waiting for HACK scripts to finish...`);
         await waitForScriptsToFinish(HACK_PATH);
@@ -176,7 +192,6 @@ export async function main(ns) {
       const totalRamUsed = growRamUsed + (weakenThreads * weakenRam);
 
       if (growThreads > 0 && weakenThreads > 0) {
-        ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
         ns.print(`${t()} 📈 [GROW PHASE] G=${growThreads}/${growIdeal} W=${weakenThreads}/${weakenIdeal} (${ns.formatRam(totalRamUsed)}) | Money: ${ns.formatNumber(money)} / ${ns.formatNumber(maxMoney)}`);
 
         ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
@@ -187,6 +202,11 @@ export async function main(ns) {
         const afterGrowMoney = getS().moneyAvailable;
         const afterGrowPercent = (afterGrowMoney / maxMoney * 100).toFixed(1);
         ns.print(`${t()} ✅ [GROW PHASE] Complete! Money after: ${ns.formatNumber(afterGrowMoney)} / ${ns.formatNumber(maxMoney)} (${afterGrowPercent}%)`);
+        if (afterGrowMoney >= maxMoney * 0.95) {
+          currentState = "HACK";
+          ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
+          ns.print(`${t()} 🔄 [STATE TRANSITION] GROW → HACK | 📡 Sent HACK to port 80`);
+        }
       } else if (growThreads > 0) {
         ns.print(`${t()} ⚠️ [GROW PHASE] Only grow fits - G=${growThreads}/${growIdeal}`);
         ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
@@ -196,9 +216,10 @@ export async function main(ns) {
         await ns.sleep(5000);
       }
       continue;
+    } else {
+      ns.print(`${t()} [DEBUG] GROW SKIP: currentState=${currentState}`);
     }
 
-    // Money is full, restart hack phase
     await ns.sleep(1000);
   }
 }
