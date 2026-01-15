@@ -1,4 +1,4 @@
-// VERSION: 7.2.1
+// VERSION: 7.3.0
 //
 // PURPOSE: Stock market arbitrage using timing-based HACK/GROW cycles
 // PARAMETERS: None
@@ -7,14 +7,15 @@
 //
 // PORT USAGE:
 // - Port 80: Receives {target: "servername"} from smartMomentumMaker
-// - Port 85: Sends "HACK" or "GROW" commands to control all smartMomentumMaker instances
+// - Port 85: Sends "HACK", "KILL" or "GROW" commands to control all smartMomentumMaker instances
 //
 // STRATEGY:
 // 1. Send HACK command -> Monitor prices for 10min -> Track lowest prices and count new lows
-// 2. Buy top 5 stocks with most new lows and closest to lowest price (80% of cash)
-// 3. Send GROW command -> Wait 10min for prices to rise
-// 4. Sell all stocks
-// 5. Repeat cycle
+// 2. Send KILL command -> Monitor for 1min -> Continue tracking if prices still falling
+// 3. Buy top 5 stocks with most new lows and closest to lowest price (80% of cash)
+// 4. Send GROW command -> Wait 10min for prices to rise
+// 5. Sell all stocks
+// 6. Repeat cycle
 
 /** @param {NS} ns **/
 export async function main(ns) {
@@ -98,7 +99,32 @@ export async function main(ns) {
 
     ns.print(`✅ [HACK PHASE] Complete - Tracked ${lowestPrices.size} stocks`);
 
-    // PHASE 2: Select top 5 stocks and buy
+    // PHASE 2: KILL phase - Stop hacking and monitor for 1 minute
+    ns.clearPort(85);
+    ns.writePort(85, "KILL");
+    ns.print("⏸️  [KILL PHASE] Started - Monitoring for 1 minute...");
+
+    const killStartTime = Date.now();
+    const killDuration = 1 * 60 * 1000; // 1 minute
+
+    while (Date.now() - killStartTime < killDuration) {
+      for (const symbol of trackedSymbols) {
+        const price = ns.stock.getPrice(symbol);
+        const existing = lowestPrices.get(symbol);
+
+        if (existing && price < existing.price) {
+          const newCount = existing.count + 1;
+          lowestPrices.set(symbol, { price: price, timestamp: Date.now(), count: newCount });
+          ns.print(`📊 [${symbol}] New low #${newCount}: $${ns.formatNumber(price)}`);
+        }
+      }
+
+      await ns.sleep(5000);
+    }
+
+    ns.print(`✅ [KILL PHASE] Complete`);
+
+    // PHASE 3: Select top 5 stocks and buy
     ns.print("💰 [BUY PHASE] Selecting top 5 stocks with most new lows...");
 
     // Create array with volatility data
@@ -148,7 +174,7 @@ export async function main(ns) {
 
     ns.print(`💵 [BUY PHASE] Complete - Invested: $${ns.formatNumber(totalInvested)}`);
 
-    // PHASE 3: Start GROW phase
+    // PHASE 4: Start GROW phase
     ns.clearPort(85);
     ns.writePort(85, "GROW");
     ns.print("📈 [GROW PHASE] Started - Waiting 10 minutes for prices to rise...");
@@ -162,7 +188,7 @@ export async function main(ns) {
 
     ns.print("✅ [GROW PHASE] Complete");
 
-    // PHASE 4: Sell all stocks
+    // PHASE 5: Sell all stocks
     ns.print("💸 [SELL PHASE] Liquidating all positions...");
     let totalProfit = 0;
 

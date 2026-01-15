@@ -1,23 +1,23 @@
 /**
- * VERSION: 9.3.0
+ * VERSION: 9.5.0
  * Smart Momentum Maker - Simplified
  *
  * DESCRIPTION:
- * Port-controlled hacking script that switches between HACK and GROW modes.
+ * Port-controlled hacking script that switches between HACK, GROW, and KILL modes.
  * No automatic transitions - fully controlled via port 85.
  *
  * STRATEGY:
- * - Waits for command on port 85 ("HACK" or "GROW")
- * - No command: Executes weaken with all available threads
+ * - Waits for command on port 85 ("HACK", "GROW", or "KILL")
  * - GROW mode: Continuous grow + weaken loop with synchronized timing
  * - HACK mode: Continuous hack + weaken loop with synchronized timing
+ * - KILL mode: Kills all running hack scripts
  *
  * PARAMETERS:
  * - target: Server hostname to manipulate
  *
  * PORT USAGE:
  * - Port 80: Sends target name on startup
- * - Port 85: Receives "HACK" or "GROW" commands to switch modes
+ * - Port 85: Receives "HACK", "GROW", or "KILL" commands to switch modes
  *
  * USAGE: run smart/smartMomentumMaker.js <target>
  */
@@ -99,7 +99,7 @@ export async function main(ns) {
   }
 
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
-  ns.tprint(`${t()} 📡 Waiting for command on port 85 (HACK or GROW)...`);
+  ns.tprint(`${t()} 📡 Waiting for command on port 85 (HACK, GROW, or KILL)...`);
 
   ns.writePort(80, JSON.stringify({ target: target }));
 
@@ -109,45 +109,23 @@ export async function main(ns) {
     const portData = ns.peek(85);
     if (portData !== "NULL PORT DATA") {
       const cmd = String(portData).toUpperCase().trim();
-      if (cmd === "HACK" || cmd === "GROW") {
+      if (cmd === "HACK" || cmd === "GROW" || cmd === "KILL") {
         currentMode = cmd;
         ns.print(`${t()} 🔄 Mode switched to: ${currentMode}`);
+
+        if (cmd === "KILL") {
+          const hackProcesses = ns.ps(thisServer).filter(p => p.filename === HACK_PATH);
+          for (const proc of hackProcesses) {
+            ns.kill(proc.pid);
+          }
+          ns.print(`${t()} ☠️ [KILL] Terminated ${hackProcesses.length} hack processes`);
+          currentMode = "";
+        }
       }
     }
 
     if (!currentMode) {
-      if (isScriptRunning(WEAKEN_PATH)) {
-        await ns.sleep(1000);
-        continue;
-      }
-
-      const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-      const weakenThreads = Math.floor(freeRam / weakenRam);
-
-      if (weakenThreads > 0) {
-        const realPlayer = getP();
-        const realServer = getS();
-        const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
-        const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-        const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
-
-        ns.print(`${t()} 🔒 [IDLE] W=${weakenThreads}`);
-        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now());
-
-        const duration = weakenTime + 500;
-        await ns.sleep(duration);
-
-        let waitCount = 0;
-        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
-        while (currentProcesses.length > 0 && waitCount < 10) {
-          await ns.sleep(1000);
-          waitCount++;
-          currentProcesses.splice(0);
-          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
-        }
-      } else {
-        await ns.sleep(1000);
-      }
+      await ns.sleep(1000);
       continue;
     }
 
