@@ -1,22 +1,23 @@
 /**
- * VERSION: 8.5.0
- * Smart Momentum Maker
+ * VERSION: 9.3.0
+ * Smart Momentum Maker - Simplified
  *
  * DESCRIPTION:
- * Optimized for stock market manipulation by creating clear price trends.
- * Uses shadow objects for precise calculations and single large executions.
+ * Port-controlled hacking script that switches between HACK and GROW modes.
+ * No automatic transitions - fully controlled via port 85.
  *
  * STRATEGY:
- * 1. WEAKEN: Reduce security to minimum
- * 2. HACK: Drain money for 10 minutes (stock price drops)
- * 3. GROW: Fill money back up (stock price rises)
- * 4. Loop
+ * - Waits for command on port 85 ("HACK" or "GROW")
+ * - No command: Executes weaken with all available threads
+ * - GROW mode: Continuous grow + weaken loop with synchronized timing
+ * - HACK mode: Continuous hack + weaken loop with synchronized timing
  *
  * PARAMETERS:
  * - target: Server hostname to manipulate
  *
  * PORT USAGE:
- * - Port 80: Sends {target: "servername", phase: "HACK"/"GROW"} on state transitions only
+ * - Port 80: Sends target name on startup
+ * - Port 85: Receives "HACK" or "GROW" commands to switch modes
  *
  * USAGE: run smart/smartMomentumMaker.js <target>
  */
@@ -33,12 +34,6 @@ const GROW_PATH = "/smart/basic-grow.js";
 const HACK_SECURITY = 0.002;
 const GROW_SECURITY = 0.004;
 const WEAKEN_SECURITY = 0.05;
-
-const STATE = {
-  WEAKEN: "WEAKEN",
-  HACK: "HACK",
-  GROW: "GROW"
-};
 
 /** @param {NS} ns **/
 export async function main(ns) {
@@ -104,216 +99,131 @@ export async function main(ns) {
   }
 
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
+  ns.tprint(`${t()} 📡 Waiting for command on port 85 (HACK or GROW)...`);
 
-  let currentState = STATE.HACK;
-  let hackPhaseStartTime = Date.now();
-  let growPhaseStartTime = 0;
+  ns.writePort(80, JSON.stringify({ target: target }));
+
+  let currentMode = "";
 
   while (true) {
-    const s = getS();
-    const money = s.moneyAvailable;
-    const maxMoney = s.moneyMax;
-    const sec = s.hackDifficulty;
-    const minSec = s.minDifficulty;
-
-    ns.print(`${t()} [STATE=${currentState}] money=${ns.formatNumber(money)}/${ns.formatNumber(maxMoney)} (${(money / maxMoney * 100).toFixed(1)}%) | sec=${sec.toFixed(2)}/${minSec.toFixed(2)}`);
-
-    // Check if security needs fixing first
-    if (sec > minSec + 5) {
-      currentState = STATE.WEAKEN;
+    const portData = ns.peek(85);
+    if (portData !== "NULL PORT DATA") {
+      const cmd = String(portData).toUpperCase().trim();
+      if (cmd === "HACK" || cmd === "GROW") {
+        currentMode = cmd;
+        ns.print(`${t()} 🔄 Mode switched to: ${currentMode}`);
+      }
     }
 
-    switch (currentState) {
-      case STATE.WEAKEN: {
-        if (isScriptRunning(HACK_PATH) || isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
-          await ns.sleep(2000);
-          break;
-        }
-
-        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-        const threads = Math.floor(freeRam / weakenRam);
-
-        if (threads > 0) {
-          const realPlayer = getP();
-          const realServer = getS();
-          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
-          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-          const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
-
-          ns.print(`${t()} 🔒 [WEAKEN] Executing ${threads} threads`);
-          ns.exec(WEAKEN_PATH, thisServer, threads, target, Date.now());
-
-          const duration = weakenTime + 500;
-          ns.print(`${t()} ⏳ [WEAKEN] Waiting ${(duration / 1000).toFixed(1)}s...`);
-          await ns.sleep(duration);
-
-          let waitCount = 0;
-          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
-          while (currentProcesses.length > 0 && waitCount < 10) {
-            ns.print(`${t()} 🟡 [WEAKEN] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
-            await ns.sleep(1000);
-            waitCount++;
-            currentProcesses.splice(0);
-            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
-          }
-        }
-
-        if (sec <= minSec + 5) {
-          currentState = STATE.HACK;
-          hackPhaseStartTime = Date.now();
-        }
-        break;
+    if (!currentMode) {
+      if (isScriptRunning(WEAKEN_PATH)) {
+        await ns.sleep(1000);
+        continue;
       }
 
-      case STATE.HACK: {
-        if (isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH) || isScriptRunning(HACK_PATH)) {
-          await ns.sleep(2000);
-          break;
-        }
+      const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+      const weakenThreads = Math.floor(freeRam / weakenRam);
 
-        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+      if (weakenThreads > 0) {
         const realPlayer = getP();
         const realServer = getS();
         const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
         const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-
-        const hackPercent = ns.formulas.hacking.hackPercent(optimalServer, optimalPlayer);
-        const hackTime = ns.formulas.hacking.hackTime(optimalServer, optimalPlayer);
         const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
 
-        const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
-        const hackThreads = Math.max(1, maxPossibleHackThreads);
-        const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY));
-        const totalRamUsed = (hackThreads * hackRam) + (weakenThreads * weakenRam);
+        ns.print(`${t()} 🔒 [IDLE] W=${weakenThreads}`);
+        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now());
 
-        ns.print(`${t()} 📉 [HACK] H=${hackThreads} W=${weakenThreads} RAM=${ns.formatRam(totalRamUsed)}`);
-
-        ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
-        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
-
-        const duration = Math.max(hackTime, weakenTime) + 500;
-        ns.print(`${t()} ⏳ [HACK] Waiting ${(duration / 1000).toFixed(1)}s...`);
+        const duration = weakenTime + 500;
         await ns.sleep(duration);
 
         let waitCount = 0;
         const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
         while (currentProcesses.length > 0 && waitCount < 10) {
-          ns.print(`${t()} 🟡 [HACK] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
           await ns.sleep(1000);
           waitCount++;
           currentProcesses.splice(0);
           currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
         }
+      } else {
+        await ns.sleep(1000);
+      }
+      continue;
+    }
 
-        const afterHackMoney = getS().moneyAvailable;
-        ns.print(`${t()} ✅ [HACK] Complete! Money: ${ns.formatNumber(afterHackMoney)}`);
+    if (isScriptRunning(HACK_PATH) || isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
+      await ns.sleep(1000);
+      continue;
+    }
 
-        if (afterHackMoney < maxMoney * 0.1 && (Date.now() - hackPhaseStartTime > 600000)) {
-          currentState = STATE.GROW;
-          growPhaseStartTime = Date.now();
-          hackPhaseStartTime = 0;
-          ns.writePort(80, JSON.stringify({ target: target, phase: "GROW" }));
-          ns.print(`${t()} 🔄 [TRANSITION] HACK → GROW`);
-        }
-        break;
+    const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
+    const realPlayer = getP();
+    const realServer = getS();
+    const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
+    const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
+
+    if (currentMode === "GROW") {
+      const currentServerForGrow = shadowServer(realServer, realServer.moneyAvailable, realServer.minDifficulty);
+      const growIdeal = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(currentServerForGrow, optimalPlayer, realServer.moneyMax)));
+      const weakenIdeal = Math.max(1, Math.ceil((growIdeal * GROW_SECURITY) / WEAKEN_SECURITY));
+      const totalIdealRam = (growIdeal * growRam) + (weakenIdeal * weakenRam);
+
+      let growThreads, weakenThreads;
+      if (totalIdealRam <= freeRam) {
+        growThreads = growIdeal;
+        weakenThreads = weakenIdeal;
+      } else {
+        growThreads = Math.floor(freeRam / (growRam + (weakenRam * (GROW_SECURITY / WEAKEN_SECURITY))));
+        weakenThreads = Math.ceil((growThreads * GROW_SECURITY) / WEAKEN_SECURITY);
       }
 
-      case STATE.GROW: {
-        if (isScriptRunning(HACK_PATH) || isScriptRunning(WEAKEN_PATH) || isScriptRunning(GROW_PATH)) {
-          await ns.sleep(2000);
-          break;
+      if (growThreads > 0 && weakenThreads > 0) {
+        const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
+        const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
+
+        ns.print(`${t()} 📈 [GROW] G=${growThreads} W=${weakenThreads}`);
+        ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
+        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
+
+        const duration = Math.max(growTime, weakenTime) + 500;
+        await ns.sleep(duration);
+
+        let waitCount = 0;
+        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+        while (currentProcesses.length > 0 && waitCount < 10) {
+          await ns.sleep(1000);
+          waitCount++;
+          currentProcesses.splice(0);
+          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
         }
+      }
+    } else if (currentMode === "HACK") {
+      const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
+      const hackThreads = Math.max(1, maxPossibleHackThreads);
+      const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY));
 
-        const freeRam = ns.getServerMaxRam(thisServer) - ns.getServerUsedRam(thisServer);
-        const realPlayer = getP();
-        const realServer = getS();
-        const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-        const currentServerForGrow = shadowServer(realServer, realServer.moneyAvailable, realServer.minDifficulty);
+      if (hackThreads > 0 && weakenThreads > 0) {
+        const hackTime = ns.formulas.hacking.hackTime(optimalServer, optimalPlayer);
+        const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
 
-        const growIdeal = Math.max(1, Math.ceil(ns.formulas.hacking.growThreads(currentServerForGrow, optimalPlayer, maxMoney)));
-        const weakenIdeal = Math.max(1, Math.ceil((growIdeal * GROW_SECURITY) / WEAKEN_SECURITY));
-        const totalIdealRam = (growIdeal * growRam) + (weakenIdeal * weakenRam);
+        ns.print(`${t()} 📉 [HACK] H=${hackThreads} W=${weakenThreads}`);
+        ns.exec(HACK_PATH, thisServer, hackThreads, target, Date.now());
+        ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
 
-        let growThreads, weakenThreads;
-        if (totalIdealRam <= freeRam) {
-          growThreads = growIdeal;
-          weakenThreads = weakenIdeal;
-        } else {
-          const maxGrowThreads = Math.floor(freeRam / growRam);
-          growThreads = Math.min(growIdeal, maxGrowThreads);
-          const growRamUsed = growThreads * growRam;
-          const ramLeftAfterGrow = freeRam - growRamUsed;
-          const maxWeakenThreads = Math.floor(ramLeftAfterGrow / weakenRam);
-          weakenThreads = Math.min(weakenIdeal, maxWeakenThreads);
+        const duration = Math.max(hackTime, weakenTime) + 500;
+        await ns.sleep(duration);
+
+        let waitCount = 0;
+        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+        while (currentProcesses.length > 0 && waitCount < 10) {
+          await ns.sleep(1000);
+          waitCount++;
+          currentProcesses.splice(0);
+          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
         }
-
-        if (growThreads > 0 && weakenThreads > 0) {
-          const realPlayer = getP();
-          const realServer = getS();
-          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
-          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-
-          const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
-          const weakenTime = ns.formulas.hacking.weakenTime(optimalServer, optimalPlayer);
-
-          const totalRamUsed = (growThreads * growRam) + (weakenThreads * weakenRam);
-          ns.print(`${t()} 📈 [GROW] G=${growThreads}/${growIdeal} W=${weakenThreads}/${weakenIdeal} RAM=${ns.formatRam(totalRamUsed)}`);
-
-          ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
-          ns.exec(WEAKEN_PATH, thisServer, weakenThreads, target, Date.now() + 1);
-
-          const duration = Math.max(growTime, weakenTime) + 500;
-          ns.print(`${t()} ⏳ [GROW] Waiting ${(duration / 1000).toFixed(1)}s...`);
-          await ns.sleep(duration);
-
-          let waitCount = 0;
-          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
-          while (currentProcesses.length > 0 && waitCount < 10) {
-            ns.print(`${t()} 🟡 [GROW] Still running, waiting 1s more... (${currentProcesses.length} processes)`);
-            await ns.sleep(1000);
-            waitCount++;
-            currentProcesses.splice(0);
-            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
-          }
-
-          const afterGrowMoney = getS().moneyAvailable;
-          ns.print(`${t()} ✅ [GROW] Complete! Money: ${ns.formatNumber(afterGrowMoney)}`);
-
-          if (afterGrowMoney >= maxMoney * 0.95 && (Date.now() - growPhaseStartTime > 600000)) {
-            currentState = STATE.HACK;
-            growPhaseStartTime = 0;
-            hackPhaseStartTime = Date.now();
-            ns.writePort(80, JSON.stringify({ target: target, phase: "HACK" }));
-            ns.print(`${t()} 🔄 [TRANSITION] GROW → HACK`);
-          }
-        } else if (growThreads > 0) {
-          const realPlayer = getP();
-          const realServer = getS();
-          const optimalServer = shadowServer(realServer, realServer.moneyMax, realServer.minDifficulty);
-          const optimalPlayer = shadowPlayer(realPlayer, realPlayer.skills.hacking);
-          const growTime = ns.formulas.hacking.growTime(optimalServer, optimalPlayer);
-
-          ns.print(`${t()} 🟡 [GROW] Only grow fits - G=${growThreads}`);
-          ns.exec(GROW_PATH, thisServer, growThreads, target, Date.now());
-
-          const duration = growTime + 500;
-          await ns.sleep(duration);
-
-          let waitCount = 0;
-          const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
-          while (currentProcesses.length > 0 && waitCount < 10) {
-            await ns.sleep(1000);
-            waitCount++;
-            currentProcesses.splice(0);
-            currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
-          }
-        } else {
-          await ns.sleep(5000);
-        }
-        break;
       }
     }
 
-    await ns.sleep(2000);
+    await ns.sleep(100);
   }
 }
