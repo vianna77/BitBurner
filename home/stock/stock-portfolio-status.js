@@ -17,9 +17,9 @@ export async function main(ns) {
   for (const sym of stocks) {
     const position = ns.stock.getPosition(sym);
     const [longShares, longPrice, shortShares, shortPrice] = position;
+    const currentPrice = ns.stock.getAskPrice(sym);
 
     if (longShares > 0) {
-      const currentPrice = ns.stock.getAskPrice(sym);
       const cost = longShares * longPrice;
       const value = longShares * currentPrice;
       const profit = value - cost;
@@ -27,6 +27,7 @@ export async function main(ns) {
 
       positions.push({
         sym,
+        type: 'long',
         shares: longShares,
         avgPrice: longPrice,
         currentPrice,
@@ -38,9 +39,36 @@ export async function main(ns) {
       totalValue += value;
 
       const emoji = profit >= 0 ? "✅" : "🔶";
-      ns.tprint(`${emoji} ${sym}`);
+      ns.tprint(`${emoji} ${sym} (LONG)`);
       ns.tprint(`   Shares: ${ns.formatNumber(longShares, 0)}`);
       ns.tprint(`   Avg Price: $${ns.formatNumber(longPrice, 2)} | Current: $${ns.formatNumber(currentPrice, 2)}`);
+      ns.tprint(`   P/L: $${ns.formatNumber(profit, 2)} (${profitPercent}%)`);
+      ns.tprint("");
+    }
+
+    if (shortShares > 0) {
+      const cost = shortShares * shortPrice;
+      const value = shortShares * currentPrice;
+      const profit = cost - value;
+      const profitPercent = ((profit / cost) * 100).toFixed(2);
+
+      positions.push({
+        sym,
+        type: 'short',
+        shares: shortShares,
+        avgPrice: shortPrice,
+        currentPrice,
+        profit,
+        profitPercent
+      });
+
+      totalCost -= cost;
+      totalValue -= value;
+
+      const emoji = profit >= 0 ? "✅" : "🔶";
+      ns.tprint(`${emoji} ${sym} (SHORT)`);
+      ns.tprint(`   Shares: ${ns.formatNumber(shortShares, 0)}`);
+      ns.tprint(`   Avg Price: $${ns.formatNumber(shortPrice, 2)} | Current: $${ns.formatNumber(currentPrice, 2)}`);
       ns.tprint(`   P/L: $${ns.formatNumber(profit, 2)} (${profitPercent}%)`);
       ns.tprint("");
     }
@@ -52,7 +80,7 @@ export async function main(ns) {
   }
 
   const totalProfit = totalValue - totalCost;
-  const totalProfitPercent = ((totalProfit / totalCost) * 100).toFixed(2);
+  const totalProfitPercent = totalCost === 0 ? '0.00' : ((totalProfit / Math.abs(totalCost)) * 100).toFixed(2);
   const emoji = totalProfit >= 0 ? "✅" : "🔶";
 
   ns.tprint("=".repeat(80));
