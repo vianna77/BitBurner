@@ -1,4 +1,10 @@
-/** @param {NS} ns **/
+/**
+ * @param {NS} ns - The Netscript API object.
+ * Script purpose: Plays a beep sound and prints a user-provided text to the terminal.
+ * @param {string} [text] - The text to print. Defaults to "No text provided" if no argument is passed.
+ * Usage example: run beep.js "Hello World"
+ */
+// VERSION 1.0.0
 export async function main(ns) {
   const text = ns.args[0] || "No text provided";
 
