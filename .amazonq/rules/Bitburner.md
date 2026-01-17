@@ -14,7 +14,8 @@ All code development here is focused on the Bitburner game and its JavaScript-ba
 - **Always show complete script**: Never send only modified snippets; the result must be the entire code ready to copy
 
 ### 3. Code Style Standards
-- **Use braces {} everywhere**: Expand all `if` and `else` statements using braces (no single-line commands without blocks)
+- **Use braces {} everywhere**: Expand all `if`, `else`, and `case` statements using braces (no single-line commands without blocks)
+- **Switch case blocks**: All `case` statements in `switch` blocks must use braces `{}` to create proper scope
 - **Indentation**: Always use 2 spaces for indentation
 
 ### 4. Version Control

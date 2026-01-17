@@ -33,6 +33,7 @@ export async function main(ns) {
   const MONEY_TASK = "Human Trafficking";
   const WANTED_TASK = "Vigilante Justice";
   const TERRORISM_TASK = "Terrorism";
+  const ARMS_TRAFFICKING_TASK = "Traffick Illegal Arms";
 
   // Timing
   const FAILSAFE_MAX_PHASE_TIME = 30 * 60 * 1000;
@@ -275,7 +276,7 @@ export async function main(ns) {
     }
 
     switch (state) {
-      case State.BOOTSTRAP:
+      case State.BOOTSTRAP: {
         members.forEach(m => {
           tryAscend(m);
           const info = ns.gang.getMemberInformation(m);
@@ -293,8 +294,9 @@ export async function main(ns) {
           enter(State.GROWTH);
         }
         break;
+      }
 
-      case State.GROWTH:
+      case State.GROWTH: {
         let growthReady = true;
         let anyAscGrowth = false;
         members.forEach(m => {
@@ -318,8 +320,9 @@ export async function main(ns) {
         if (anyAscGrowth) enter(State.RESET);
         else if (growthReady) enter(State.PRODUCTION);
         break;
+      }
 
-      case State.PRODUCTION:
+      case State.PRODUCTION: {
         members.sort((a, b) => {
           const infoA = ns.gang.getMemberInformation(a);
           const infoB = ns.gang.getMemberInformation(b);
@@ -345,7 +348,7 @@ export async function main(ns) {
             assign(m, "Train Charisma");
           } else if (hasMaxRep) {
             // Late game: start with everyone on money
-            assign(m, "Traffick Illegal Arms");
+            assign(m, ARMS_TRAFFICKING_TASK);
           } else {
             // Early/mid game: current strategy
             if (i < RESPECT_SLOTS) {
@@ -402,8 +405,9 @@ export async function main(ns) {
         }
         if (goToReduction) enter(State.REDUCTION);
         break;
+      }
 
-      case State.REDUCTION:
+      case State.REDUCTION: {
         let anyAscendedThisTick = false;
         for (const m of members) {
           if (tryAscend(m)) anyAscendedThisTick = true;
@@ -424,8 +428,9 @@ export async function main(ns) {
 
         if (leaveReduction) enter(State.RESET);
         break;
+      }
 
-      case State.RESET:
+      case State.RESET: {
         let resetReady = true;
         members.forEach(m => {
           tryAscend(m);
@@ -436,6 +441,7 @@ export async function main(ns) {
         });
         enter(resetReady ? State.PRODUCTION : State.GROWTH);
         break;
+      }
     }
 
     await ns.sleep(10000);
