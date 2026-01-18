@@ -1,23 +1,23 @@
 /**
- * VERSION: 9.5.0
- * Smart Momentum Maker - Simplified
+ * VERSION: 9.7.0
+ * Smart Momentum Maker - Ultra Simplified
  *
  * DESCRIPTION:
- * Port-controlled hacking script that switches between HACK, GROW, and KILL modes.
- * No automatic transitions - fully controlled via port 85.
+ * Port-controlled hacking script that switches between HACK and GROW modes.
+ * Automatically kills previous scripts when switching modes.
+ * Used together with stock-momentum-maker.js for automated stock trading and hacking coordination.
  *
  * STRATEGY:
- * - Waits for command on port 85 ("HACK", "GROW", or "KILL")
+ * - Waits for command on port 85 ("HACK" or "GROW")
+ * - Automatically kills any running hack/grow/weaken scripts before starting new mode
  * - GROW mode: Continuous grow + weaken loop with synchronized timing
  * - HACK mode: Continuous hack + weaken loop with synchronized timing
- * - KILL mode: Kills all running hack scripts
  *
  * PARAMETERS:
  * - target: Server hostname to manipulate
  *
  * PORT USAGE:
- * - Port 80: Sends target name on startup
- * - Port 85: Receives "HACK", "GROW", or "KILL" commands to switch modes
+ * - Port 85: Receives "HACK" or "GROW" commands to switch modes
  *
  * USAGE: run smart/smartMomentumMaker.js <target>
  */
@@ -94,42 +94,33 @@ export async function main(ns) {
     totalPlaytime: base.totalPlaytime
   });
 
-  function isScriptRunning(scriptPath) {
-    return ns.ps(thisServer).some(p => p.filename === scriptPath);
-  }
-
   ns.tprint(`${t()} 🚀 Starting Smart Momentum Maker on ${target}`);
-  ns.tprint(`${t()} 📡 Waiting for command on port 85 (HACK, GROW, or KILL)...`);
-
-  ns.writePort(80, JSON.stringify({ target: target }));
+  ns.tprint(`${t()} 📡 Waiting for command on port 85 (HACK or GROW)...`);
 
   let currentMode = "";
 
   while (true) {
-    const portData = ns.peek(85);
+    const portData = ns.readPort(85);
     if (portData !== "NULL PORT DATA") {
       const cmd = String(portData).toUpperCase().trim();
-      if (cmd === "HACK" || cmd === "GROW" || cmd === "KILL") {
+      if (cmd === "HACK" || cmd === "GROW") {
+        // Kill any running hack/grow/weaken scripts before switching
+        const allProcesses = ns.ps(thisServer).filter(p =>
+          p.filename === HACK_PATH || p.filename === GROW_PATH || p.filename === WEAKEN_PATH
+        );
+        for (const proc of allProcesses) {
+          ns.kill(proc.pid);
+        }
+        if (allProcesses.length > 0) {
+          ns.print(`${t()} ☠️ Killed ${allProcesses.length} processes before switching to ${cmd}`);
+        }
+
         currentMode = cmd;
         ns.print(`${t()} 🔄 Mode switched to: ${currentMode}`);
-
-        if (cmd === "KILL") {
-          const hackProcesses = ns.ps(thisServer).filter(p => p.filename === HACK_PATH);
-          for (const proc of hackProcesses) {
-            ns.kill(proc.pid);
-          }
-          ns.print(`${t()} ☠️ [KILL] Terminated ${hackProcesses.length} hack processes`);
-          currentMode = "";
-        }
       }
     }
 
     if (!currentMode) {
-      await ns.sleep(1000);
-      continue;
-    }
-
-    if (isScriptRunning(HACK_PATH) || isScriptRunning(GROW_PATH) || isScriptRunning(WEAKEN_PATH)) {
       await ns.sleep(1000);
       continue;
     }
@@ -148,11 +139,13 @@ export async function main(ns) {
 
       let growThreads, weakenThreads;
       if (totalIdealRam <= freeRam) {
-        growThreads = growIdeal;
-        weakenThreads = weakenIdeal;
+        growThreads = Math.max(1, growIdeal - 10);
+        weakenThreads = Math.max(1, weakenIdeal - 10);
       } else {
         growThreads = Math.floor(freeRam / (growRam + (weakenRam * (GROW_SECURITY / WEAKEN_SECURITY))));
+        growThreads = Math.max(1, growThreads - 10);
         weakenThreads = Math.ceil((growThreads * GROW_SECURITY) / WEAKEN_SECURITY);
+        weakenThreads = Math.max(1, weakenThreads - 10);
       }
 
       if (growThreads > 0 && weakenThreads > 0) {
@@ -167,18 +160,18 @@ export async function main(ns) {
         await ns.sleep(duration);
 
         let waitCount = 0;
-        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+        const currentProcesses = ns.ps(thisServer).filter(p => p.filename === GROW_PATH || p.filename === WEAKEN_PATH);
         while (currentProcesses.length > 0 && waitCount < 10) {
           await ns.sleep(1000);
           waitCount++;
           currentProcesses.splice(0);
-          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
+          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename === GROW_PATH || p.filename === WEAKEN_PATH));
         }
       }
     } else if (currentMode === "HACK") {
       const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
-      const hackThreads = Math.max(1, maxPossibleHackThreads);
-      const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY));
+      const hackThreads = Math.max(1, maxPossibleHackThreads - 10);
+      const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY) - 10);
 
       if (hackThreads > 0 && weakenThreads > 0) {
         const hackTime = ns.formulas.hacking.hackTime(optimalServer, optimalPlayer);
@@ -192,12 +185,12 @@ export async function main(ns) {
         await ns.sleep(duration);
 
         let waitCount = 0;
-        const currentProcesses = ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js');
+        const currentProcesses = ns.ps(thisServer).filter(p => p.filename === HACK_PATH || p.filename === WEAKEN_PATH);
         while (currentProcesses.length > 0 && waitCount < 10) {
           await ns.sleep(1000);
           waitCount++;
           currentProcesses.splice(0);
-          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename !== 'smart/smartMomentumMaker.js'));
+          currentProcesses.push(...ns.ps(thisServer).filter(p => p.filename === HACK_PATH || p.filename === WEAKEN_PATH));
         }
       }
     }

@@ -6,7 +6,7 @@
 // USAGE: run stock/stock-momentum-maker.js
 //
 // PORT USAGE:
-// - Port 80: Receives {target: "servername"} from smartMomentumMaker
+// - Port 80: Receives {target: "servername"}
 // - Port 85: Sends "HACK", "KILL" or "GROW" commands to control all smartMomentumMaker instances
 //
 // STRATEGY:
