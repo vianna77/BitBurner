@@ -1,6 +1,12 @@
 /** @param {NS} ns **/
 export async function main(ns) {
   ns.disableLog("ALL");
+  ns.ui.openTail();
+
+  const t = () => {
+    const date = new Date();
+    return `[${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}]`;
+  };
 
   const symbols = ns.stock.getSymbols();
   const filteredStocks = [];
@@ -21,7 +27,7 @@ export async function main(ns) {
     }
   }
 
-  ns.print(`Monitoring ${filteredStocks.length} stocks with volatility < 0.7%`);
+  ns.print(`${t()} Monitoring ${filteredStocks.length} stocks with volatility < 0.7%`);
 
   let iterations = 0;
   const REPORT_INTERVAL = 10; // 10 * 6s = 60 seconds
@@ -63,7 +69,7 @@ export async function main(ns) {
 
     // Phase 2: Sorted Report every 10 ticks
     if (iterations >= REPORT_INTERVAL) {
-      ns.print("--- RELIABILITY REPORT (Sorted by Lifetime) ---");
+      ns.print(`${t()} --- RELIABILITY REPORT (Sorted by Lifetime) ---`);
 
       // Sort symbols by Lifetime Accuracy descending
       const sortedList = [...filteredStocks].sort((a, b) => {
@@ -80,7 +86,7 @@ export async function main(ns) {
           const windowAccuracy = (windowCount / data.history.length) * 100;
           const lifetimeAccuracy = (data.totalSuccesses / data.totalTicks) * 100;
           const statusEmoji = windowAccuracy >= 70 ? "✅" : "❌";
-          ns.print(`${statusEmoji} ${sym} | Lifetime: ${lifetimeAccuracy.toFixed(1)}% | Window: ${windowAccuracy.toFixed(1)}% (${data.totalSuccesses}/${data.totalTicks} ticks)`);
+          ns.print(`${t()} ${statusEmoji} ${sym} | Lifetime: ${lifetimeAccuracy.toFixed(1)}% | Window: ${windowAccuracy.toFixed(1)}% (${data.totalSuccesses}/${data.totalTicks} ticks)`);
         }
       }
       iterations = 0;

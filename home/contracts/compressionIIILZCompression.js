@@ -19,20 +19,16 @@ export async function main(ns) {
   ns.tprint(`DEBUG: Param 0: ${ns.args[0]}`);
 
   if (ns.args.length === 0) {
-    {
-      ns.tprint("!!! ERROR: No input data provided. !!!");
-      return;
-    }
+    ns.tprint("!!! ERROR: No input data provided. !!!");
+    return;
   }
 
   let input = ns.args[0];
 
   try {
     if (typeof input === "string" && (input.startsWith("[") || input.startsWith("\""))) {
-      {
-        const parsed = JSON.parse(input);
-        input = Array.isArray(parsed) ? parsed[0] : parsed;
-      }
+      const parsed = JSON.parse(input);
+      input = Array.isArray(parsed) ? parsed[0] : parsed;
     }
 
     const result = solveLZCompression(input);
@@ -40,16 +36,17 @@ export async function main(ns) {
     ns.tprint(`Input:  ${input}`);
     ns.tprint(`Result: ${result}`);
   } catch (e) {
-    {
-      ns.tprint("!!! ERROR: Failed to process input. !!!");
-      ns.tprint(`!!! Exception: ${e.toString()}`);
-    }
+    ns.tprint("!!! ERROR: Failed to process input. !!!");
+    ns.tprint(`!!! Exception: ${e.toString()}`);
   }
 }
 
+/** @param {string} s */
 function solveLZCompression(s) {
   const n = s.length;
-  // state 0: Literal, state 1: Reference
+  // dp[i][state] stores the shortest encoded string to compress first i characters
+  // state 0: Next chunk must be Type 1 (Literal)
+  // state 1: Next chunk must be Type 2 (Reference)
   const dp = Array.from({ length: n + 1 }, () => {
     return [null, null];
   });
@@ -57,71 +54,47 @@ function solveLZCompression(s) {
   dp[0][0] = "";
 
   for (let i = 0; i <= n; i++) {
-    {
-      for (let state = 0; state < 2; state++) {
-        {
-          const currentPath = dp[i][state];
-          if (currentPath === null) {
-            {
-              continue;
+    // Handle state transitions with length 0 (alternating types without consuming)
+    for (let j = 0; j < 2; j++) {
+      if (dp[i][0] !== null) {
+        const nextStr = dp[i][0] + "0";
+        if (dp[i][1] === null || nextStr.length < dp[i][1].length) {
+          dp[i][1] = nextStr;
+        }
+      }
+      if (dp[i][1] !== null) {
+        const nextStr = dp[i][1] + "0";
+        if (dp[i][0] === null || nextStr.length < dp[i][0].length) {
+          dp[i][0] = nextStr;
+        }
+      }
+    }
+
+    // Type 1: Literal (State 0)
+    if (dp[i][0] !== null) {
+      for (let L = 1; L <= 9 && i + L <= n; L++) {
+        const nextStr = dp[i][0] + L + s.substring(i, i + L);
+        if (dp[i + L][1] === null || nextStr.length < dp[i + L][1].length) {
+          dp[i + L][1] = nextStr;
+        }
+      }
+    }
+
+    // Type 2: Reference (State 1)
+    if (dp[i][1] !== null) {
+      for (let L = 1; L <= 9 && i + L <= n; L++) {
+        for (let X = 1; X <= 9 && X <= i; X++) {
+          let match = true;
+          for (let k = 0; k < L; k++) {
+            if (s[i + k] !== s[i + k - X]) {
+              match = false;
+              break;
             }
           }
-
-          if (state === 0) {
-            {
-              // Type 1: Literal
-              for (let L = 1; L <= 9 && i + L <= n; L++) {
-                {
-                  const nextStr = currentPath + L + s.substring(i, i + L);
-                  if (dp[i + L][1] === null || nextStr.length < dp[i + L][1].length) {
-                    {
-                      dp[i + L][1] = nextStr;
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            {
-              // Type 2: Reference
-              for (let L = 1; L <= 9 && i + L <= n; L++) {
-                {
-                  for (let X = 1; X <= 9 && X <= i; X++) {
-                    {
-                      let match = true;
-                      for (let k = 0; k < L; k++) {
-                        {
-                          if (s[i + k] !== s[i + k - X]) {
-                            {
-                              match = false;
-                              break;
-                            }
-                          }
-                        }
-                      }
-                      if (match) {
-                        {
-                          const nextStr = currentPath + L + X;
-                          if (dp[i + L][0] === null || nextStr.length < dp[i + L][0].length) {
-                            {
-                              dp[i + L][0] = nextStr;
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // Cross-state transition with '0'
-          const nextState = 1 - state;
-          const nextStrZero = currentPath + "0";
-          if (dp[i][nextState] === null || nextStrZero.length < dp[i][nextState].length) {
-            {
-              dp[i][nextState] = nextStrZero;
+          if (match) {
+            const nextStr = dp[i][1] + L + X;
+            if (dp[i + L][0] === null || nextStr.length < dp[i + L][0].length) {
+              dp[i + L][0] = nextStr;
             }
           }
         }
@@ -131,19 +104,17 @@ function solveLZCompression(s) {
 
   let candidates = [];
   if (dp[n][0] !== null) {
-    {
-      candidates.push(dp[n][0]);
-    }
+    candidates.push(dp[n][0]);
   }
   if (dp[n][1] !== null) {
-    {
-      candidates.push(dp[n][1]);
-    }
+    candidates.push(dp[n][1]);
+  }
+
+  if (candidates.length === 0) {
+    return "";
   }
 
   return candidates.reduce((a, b) => {
-    {
-      return a.length <= b.length ? a : b;
-    }
+    return a.length <= b.length ? a : b;
   });
 }

@@ -139,11 +139,11 @@ export async function main(ns) {
 
       let growThreads, weakenThreads;
       if (totalIdealRam <= freeRam) {
-        growThreads = Math.max(1, growIdeal - 10);
+        growThreads = Math.max(1, growIdeal - 20);
         weakenThreads = Math.max(1, weakenIdeal - 10);
       } else {
         growThreads = Math.floor(freeRam / (growRam + (weakenRam * (GROW_SECURITY / WEAKEN_SECURITY))));
-        growThreads = Math.max(1, growThreads - 10);
+        growThreads = Math.max(1, growThreads - 20);
         weakenThreads = Math.ceil((growThreads * GROW_SECURITY) / WEAKEN_SECURITY);
         weakenThreads = Math.max(1, weakenThreads - 10);
       }
@@ -170,7 +170,7 @@ export async function main(ns) {
       }
     } else if (currentMode === "HACK") {
       const maxPossibleHackThreads = Math.floor(freeRam / (hackRam + (weakenRam * (HACK_SECURITY / WEAKEN_SECURITY))));
-      const hackThreads = Math.max(1, maxPossibleHackThreads - 10);
+      const hackThreads = Math.max(1, maxPossibleHackThreads - 20);
       const weakenThreads = Math.max(1, Math.ceil((hackThreads * HACK_SECURITY) / WEAKEN_SECURITY) - 10);
 
       if (hackThreads > 0 && weakenThreads > 0) {
