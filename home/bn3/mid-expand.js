@@ -5,56 +5,67 @@ export async function main(ns) {
 
   const division = "AgriCorp";
   const cityOrder = ["Sector-12", "Aevum", "Chongqing", "New Tokyo", "Ishima", "Volhaven"];
-  const TARGET_OFFICE = 12;
-  const JOBS = { Operations: 4, Engineer: 3, Business: 5 };
+  const TARGET_OFFICE = 6; // Começa menor para reduzir gastos
+  const JOBS = { Engineer: 2, Business: 2 }; // Produção mínima inicial
   const CHECK_INTERVAL = 10000;
-  const EXPANSION_COST = 4e9; // 4B mínimo por cidade
-  const MATERIALS = ["Water", "Chemicals"];
+  const EXPANSION_COST = 4e9;
+  const WAREHOUSE_COST = 1e9;
   const PRODUCTS = ["Food", "Plants"];
-  let smartSupplyEnabled = {};
+  const PROFIT_THRESHOLD = 500000;
 
+  let smartSupplyEnabled = {};
   for (const city of cityOrder) smartSupplyEnabled[city] = false;
 
   while (true) {
     const corpInfo = corp.getCorporation();
+    ns.print("--------------------------------------");
 
     for (const city of cityOrder) {
-      // ======================
-      // EXPANSÃO CONDICIONAL
-      // ======================
       let office = null;
-      try {
-        office = corp.getOffice(division, city);
-      } catch { office = null; }
+      try { office = corp.getOffice(division, city); } catch { office = null; }
 
+      // EXPAND OFFICE SE NÃO EXISTE
       if (!office) {
         if (corpInfo.funds >= EXPANSION_COST) {
           corp.expandCity(division, city);
           ns.print(`✅ Office expanded to ${city}`);
         } else {
           ns.print(`💰 Waiting to expand to ${city} (need 4B)`);
-          continue; // Não dá para expandir, pula para próxima cidade
+          continue;
         }
       }
 
-      office = corp.getOffice(division, city); // Atualiza office
-      const warehouse = corp.getWarehouse(division, city);
+      office = corp.getOffice(division, city);
 
-      // ======================
-      // OFFICE SIZE + CONTRATAÇÃO
-      // ======================
+      // COMPRA WAREHOUSE SE NÃO EXISTE
+      let warehouse = null;
+      try { warehouse = corp.getWarehouse(division, city); } catch { warehouse = null; }
+
+      if (!warehouse) {
+        if (corpInfo.funds >= WAREHOUSE_COST) {
+          corp.purchaseWarehouse(division, city);
+          warehouse = corp.getWarehouse(division, city);
+          ns.print(`✅ Warehouse purchased in ${city}`);
+        } else {
+          ns.print(`💰 Waiting for funds to buy warehouse in ${city}`);
+          continue;
+        }
+      }
+
+      // UPGRADES DE OFFICE
       if (office.size < TARGET_OFFICE) {
         corp.upgradeOfficeSize(division, city, TARGET_OFFICE - office.size);
+        office = corp.getOffice(division, city);
       }
 
+      // CONTRATAÇÃO
       while (office.numEmployees < TARGET_OFFICE) {
         const hired = corp.hireEmployee(division, city);
-        if (!hired) break; // Sem dinheiro ou limite atingido
+        if (!hired) break;
+        office = corp.getOffice(division, city);
       }
 
-      // ======================
-      // JOB ASSIGNMENT
-      // ======================
+      // JOB ASSIGNMENT BASEADO EM UNASSIGNED
       let unassigned = office.employeeJobs["Unassigned"];
       for (const job of Object.keys(JOBS)) {
         const assign = Math.min(JOBS[job], unassigned);
@@ -64,46 +75,35 @@ export async function main(ns) {
         }
       }
 
-      // ======================
       // VENDA DE PRODUTOS
-      // ======================
       for (const product of PRODUCTS) {
         corp.sellMaterial(division, city, product, "MAX", "MP");
       }
 
-      // ======================
-      // SMART SUPPLY
-      // ======================
+      // SMART SUPPLY IMEDIATO
       if (!smartSupplyEnabled[city]) {
-        let ready = true;
-        for (const mat of MATERIALS) {
-          const m = corp.getMaterial(division, city, mat);
-          if (m.stored === 0) ready = false;
-        }
-        if (ready && corp.hasUnlock("Smart Supply")) {
+        if (corp.hasUnlock("Smart Supply")) {
           corp.setSmartSupply(division, city, true);
           smartSupplyEnabled[city] = true;
-          ns.print(`💡 Smart Supply ENABLED in ${city}`);
+          ns.print(`💡 Smart Supply ENABLED immediately in ${city}`);
         }
       }
 
-      // ======================
-      // MANUTENÇÃO
-      // ======================
-      if (office.avgEnergy < 95) corp.buyTea(division, city);
-      if (office.avgMorale < 95 && corpInfo.funds > 5e6)
-        corp.throwParty(division, city, 50000);
-
-      // ======================
-      // STATUS
-      // ======================
+      // MANUTENÇÃO SÓ SE LUCRATIVO
       const divInfo = corp.getDivision(division);
+      const lastProfit = divInfo.lastCycleRevenue - divInfo.lastCycleExpenses;
+      if (lastProfit > PROFIT_THRESHOLD) {
+        if (office.avgEnergy < 90) corp.buyTea(division, city);
+        if (office.avgMorale < 90) corp.throwParty(division, city, 50000);
+      }
+
+      // LOG
       ns.print(
         `${city} | Food: ${corp.getMaterial(division, city, "Food").stored.toFixed(1)} | ` +
         `Plants: ${corp.getMaterial(division, city, "Plants").stored.toFixed(1)} | ` +
         `Rev: ${ns.formatNumber(divInfo.lastCycleRevenue)} | ` +
         `Exp: ${ns.formatNumber(divInfo.lastCycleExpenses)} | ` +
-        `Profit: ${ns.formatNumber(divInfo.lastCycleRevenue - divInfo.lastCycleExpenses)} | ` +
+        `Profit: ${ns.formatNumber(lastProfit)} | ` +
         `Emp: ${office.numEmployees} | Unassigned: ${office.employeeJobs["Unassigned"]} | ` +
         `WH: ${warehouse.sizeUsed.toFixed(1)}/${warehouse.size}`
       );
