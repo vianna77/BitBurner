@@ -1,7 +1,6 @@
 /** @param {NS} ns **/
 export async function main(ns) {
   ns.disableLog("ALL");
-  ns.ui.openTail();
 
   const t = () => {
     const date = new Date();
