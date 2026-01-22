@@ -94,7 +94,7 @@ export async function main(ns) {
 
         if (oldProd.rating < bestRating * 0.75) {
           corp.discontinueProduct(DIV, oldest);
-          ns.print(`♻️ Retired ${oldest}`);
+          ns.print(`♻️ Retired ${oldest} (Rating: ${oldProd.rating.toFixed(1)} vs Best: ${bestRating.toFixed(1)})`);
         }
       }
     }
