@@ -5,75 +5,83 @@ export async function main(ns) {
 
   const division = "AgriCorp";
   const restaurantDiv = "Foodies";
-  const cityOrder = ["Sector-12", "Aevum", "Chongqing", "New Tokyo", "Ishima", "Volhaven"];
+
+  const cityOrder = [
+    "Sector-12",
+    "Aevum",
+    "Chongqing",
+    "New Tokyo",
+    "Ishima",
+    "Volhaven",
+  ];
+
   const TARGET_OFFICE = 6;
   const JOBS = { Engineer: 2, Business: 2 };
   const CHECK_INTERVAL = 10000;
+
   const EXPANSION_COST = 4e9;
   const WAREHOUSE_COST = 1e9;
-  const PRODUCTS = ["Food", "Plants"];
   const PROFIT_THRESHOLD = 500000;
 
-  let smartSupplyEnabled = {};
-  for (const city of cityOrder) {
-    smartSupplyEnabled[city] = false;
+  const smartSupplyEnabled = Object.fromEntries(
+    cityOrder.map(c => [c, false])
+  );
+
+  function restaurantExistsInCity(city) {
+    try {
+      const div = corp.getDivision(restaurantDiv);
+      return div.cities.includes(city);
+    } catch {
+      return false;
+    }
   }
 
   while (true) {
     const corpInfo = corp.getCorporation();
+    const hasExportUnlock = corp.hasUnlock("Export");
     ns.print("--------------------------------------");
 
     for (const city of cityOrder) {
-      let office = null;
+      // --------- OFFICE / CITY ----------
+      let office;
       try {
         office = corp.getOffice(division, city);
-      } catch (e) {
-        office = null;
-      }
-
-      if (!office) {
-        if (corpInfo.funds >= EXPANSION_COST) {
-          corp.expandCity(division, city);
-          ns.print(`✅ Office expanded to ${city}`);
-        } else {
+      } catch {
+        if (corpInfo.funds < EXPANSION_COST) {
           ns.print(`💰 Waiting to expand to ${city} (need 4B)`);
           continue;
         }
+        corp.expandCity(division, city);
+        office = corp.getOffice(division, city);
+        ns.print(`✅ Office expanded to ${city}`);
       }
 
-      office = corp.getOffice(division, city);
-
-      let warehouse = null;
+      // --------- WAREHOUSE ----------
+      let warehouse;
       try {
         warehouse = corp.getWarehouse(division, city);
-      } catch (e) {
-        warehouse = null;
-      }
-
-      if (!warehouse) {
-        if (corpInfo.funds >= WAREHOUSE_COST) {
-          corp.purchaseWarehouse(division, city);
-          warehouse = corp.getWarehouse(division, city);
-          ns.print(`✅ Warehouse purchased in ${city}`);
-        } else {
+      } catch {
+        if (corpInfo.funds < WAREHOUSE_COST) {
           ns.print(`💰 Waiting for funds to buy warehouse in ${city}`);
           continue;
         }
+        corp.purchaseWarehouse(division, city);
+        warehouse = corp.getWarehouse(division, city);
+        ns.print(`✅ Warehouse purchased in ${city}`);
       }
 
+      // --------- OFFICE SIZE / HIRING ----------
       if (office.size < TARGET_OFFICE) {
         corp.upgradeOfficeSize(division, city, TARGET_OFFICE - office.size);
         office = corp.getOffice(division, city);
       }
 
       while (office.numEmployees < TARGET_OFFICE) {
-        const hired = corp.hireEmployee(division, city);
-        if (!hired) {
-          break;
-        }
+        if (!corp.hireEmployee(division, city)) break;
         office = corp.getOffice(division, city);
       }
 
+      // --------- JOB ASSIGNMENT ----------
       let unassigned = office.employeeJobs["Unassigned"];
       for (const job of Object.keys(JOBS)) {
         const assign = Math.min(JOBS[job], unassigned);
@@ -83,32 +91,17 @@ export async function main(ns) {
         }
       }
 
-      // VENDA E EXPORTAÇÃO
-      for (const product of PRODUCTS) {
-        corp.sellMaterial(division, city, product, "MAX", "MP");
+      // --------- MATERIAL LOGIC ----------
+      corp.sellMaterial(division, city, "Plants", "MAX", "MP");
 
-        // Se o produto for Food, tenta exportar para o Restaurant
-        if (product === "Food") {
-          try {
-            const matInfo = corp.getMaterial(division, city, "Food");
-            let alreadyExporting = false;
-            for (const exp of matInfo.exports) {
-              if (exp.div === restaurantDiv) {
-                alreadyExporting = true;
-              }
-            }
-
-            if (!alreadyExporting) {
-              // Tenta exportar para o restaurante na mesma cidade
-              corp.setExport(division, city, restaurantDiv, city, "Food", "MAX");
-              ns.print(`🚚 Export established: ${division} -> ${restaurantDiv} (${city})`);
-            }
-          } catch (e) {
-            // Silencioso se o restaurante ainda não existir nesta cidade
-          }
-        }
+      if (hasExportUnlock && restaurantExistsInCity(city)) {
+        corp.exportMaterial(division, city, restaurantDiv, city, "Food", "20");
+        corp.sellMaterial(division, city, "Food", "MAX", "MP");
+      } else {
+        corp.sellMaterial(division, city, "Food", "MAX", "MP");
       }
 
+      // --------- SMART SUPPLY ----------
       if (!smartSupplyEnabled[city]) {
         if (corp.hasUnlock("Smart Supply")) {
           corp.setSmartSupply(division, city, true);
@@ -117,17 +110,15 @@ export async function main(ns) {
         }
       }
 
+      // --------- MAINTENANCE ----------
       const divInfo = corp.getDivision(division);
       const lastProfit = divInfo.lastCycleRevenue - divInfo.lastCycleExpenses;
       if (lastProfit > PROFIT_THRESHOLD) {
-        if (office.avgEnergy < 90) {
-          corp.buyTea(division, city);
-        }
-        if (office.avgMorale < 90) {
-          corp.throwParty(division, city, 50000);
-        }
+        if (office.avgEnergy < 90) corp.buyTea(division, city);
+        if (office.avgMorale < 90) corp.throwParty(division, city, 50000);
       }
 
+      // --------- RESTORED LOGS ----------
       ns.print(
         `${city} | Food: ${corp.getMaterial(division, city, "Food").stored.toFixed(1)} | ` +
         `Plants: ${corp.getMaterial(division, city, "Plants").stored.toFixed(1)} | ` +
@@ -135,7 +126,7 @@ export async function main(ns) {
         `Exp: ${ns.formatNumber(divInfo.lastCycleExpenses)} | ` +
         `Profit: ${ns.formatNumber(lastProfit)} | ` +
         `Emp: ${office.numEmployees} | Unassigned: ${office.employeeJobs["Unassigned"]} | ` +
-        `WH: ${warehouse.sizeUsed.toFixed(1)}/${warehouse.size.toFixed(0)}`
+        `WH: ${warehouse.sizeUsed.toFixed(1)}/${warehouse.size}`
       );
     }
 
