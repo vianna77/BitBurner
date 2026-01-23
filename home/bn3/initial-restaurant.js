@@ -7,8 +7,11 @@ export async function main(ns) {
   const CITY = "Sector-12";
 
   const OFFICE_SIZE = 9;
-  const DEV_INVEST = 5e8;   // por lado
+  const DEV_INVEST = 5e8;   // per side
   const CHECK = 5000;
+
+  // Track the total number of dishes to ensure unique names
+  let productCounter = corp.getDivision(DIV).products.length;
 
   // JOB SPLITS
   const DEV_JOBS = {
@@ -43,6 +46,7 @@ export async function main(ns) {
 
     while (office.numEmployees < OFFICE_SIZE) {
       corp.hireEmployee(DIV, CITY);
+      office = corp.getOffice(DIV, CITY);
     }
   }
 
@@ -64,9 +68,17 @@ export async function main(ns) {
 
   function startNextProduct() {
     const div = corp.getDivision(DIV);
-    const nextIndex = div.products.length + 1;
-    const name = `Dish-${nextIndex}`;
+    const products = div.products;
 
+    // Logic to rotate products: if at limit (3), delete the oldest one
+    if (products.length >= 3) {
+      const oldestProduct = products[0];
+      ns.print(`🗑️ Discontinuing oldest product: ${oldestProduct}`);
+      corp.discontinueProduct(DIV, oldestProduct);
+    }
+
+    productCounter++;
+    const name = `Dish-${productCounter}`;
     const funds = corp.getCorporation().funds;
     const cost = DEV_INVEST * 2;
 
@@ -99,13 +111,17 @@ export async function main(ns) {
       return;
     }
 
-    // Produto pronto
+    // Product is ready
     setJobs(PROD_JOBS);
     corp.sellProduct(DIV, CITY, productName, "MAX", "MP", true);
 
-    // Cria o próximo se não houver outro em dev
+    // If the latest product is finished, cycle to the next one
     const div = corp.getDivision(DIV);
-    if (div.products.length === 1 || p.developmentProgress === 100) {
+    const inDev = div.products.some(
+      prod => corp.getProduct(DIV, CITY, prod).developmentProgress < 100
+    );
+
+    if (!inDev) {
       startNextProduct();
     }
   }
@@ -126,7 +142,8 @@ export async function main(ns) {
     }
 
     ns.print("================================");
-    ns.print(`DEV ${name ?? "NONE"} | ${dev}%`);
+    ns.print(`ACTIVE PRODUCTS: ${div.products.length}/3`);
+    ns.print(`LATEST: ${name ?? "NONE"} | ${dev}%`);
     ns.print(
       `Rev: ${ns.formatNumber(div.lastCycleRevenue)} | ` +
       `Profit: ${ns.formatNumber(div.lastCycleRevenue - div.lastCycleExpenses)}`
