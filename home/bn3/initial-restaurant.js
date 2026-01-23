@@ -12,11 +12,11 @@ export async function main(ns) {
 
   // JOB SPLITS
   const DEV_JOBS = {
-    Operations: 0,
-    Engineer: 8,
-    Business: 0,
+    Operations: 3,
+    Engineer: 3,
+    Business: 1,
     Management: 1,
-    "Research & Development": 0,
+    "Research & Development": 1,
   };
 
   const PROD_JOBS = {
