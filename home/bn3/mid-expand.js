@@ -42,7 +42,6 @@ export async function main(ns) {
     ns.print("--------------------------------------");
 
     for (const city of cityOrder) {
-      // --------- OFFICE / CITY ----------
       let office;
       try {
         office = corp.getOffice(division, city);
@@ -56,21 +55,16 @@ export async function main(ns) {
         ns.print(`✅ Office expanded to ${city}`);
       }
 
-      // --------- WAREHOUSE ----------
       let warehouse;
       try {
         warehouse = corp.getWarehouse(division, city);
       } catch {
-        if (corpInfo.funds < WAREHOUSE_COST) {
-          ns.print(`💰 Waiting for funds to buy warehouse in ${city}`);
-          continue;
-        }
+        if (corpInfo.funds < WAREHOUSE_COST) continue;
         corp.purchaseWarehouse(division, city);
         warehouse = corp.getWarehouse(division, city);
         ns.print(`✅ Warehouse purchased in ${city}`);
       }
 
-      // --------- OFFICE SIZE / HIRING ----------
       if (office.size < TARGET_OFFICE) {
         corp.upgradeOfficeSize(division, city, TARGET_OFFICE - office.size);
         office = corp.getOffice(division, city);
@@ -81,7 +75,6 @@ export async function main(ns) {
         office = corp.getOffice(division, city);
       }
 
-      // --------- JOB ASSIGNMENT ----------
       let unassigned = office.employeeJobs["Unassigned"];
       for (const job of Object.keys(JOBS)) {
         const assign = Math.min(JOBS[job], unassigned);
@@ -91,38 +84,48 @@ export async function main(ns) {
         }
       }
 
-      // --------- MATERIAL LOGIC ----------
-      corp.sellMaterial(division, city, "Plants", "MAX", "MP");
+      // --------- MATERIAL LOGIC (DYNAMIC FLUSH & EXPORT) ----------
+      const warehouseFilled = warehouse.sizeUsed / warehouse.size;
+      const foodMat = corp.getMaterial(division, city, "Food");
+      const plantsMat = corp.getMaterial(division, city, "Plants");
 
-      // --------- FOOD LOGIC (40% para restaurante, 60% venda normal) ----------
-      if (hasExportUnlock && restaurantExistsInCity(city)) {
-        const foodAmount = corp.getMaterial(division, city, "Food").stored;
-        const toExport = Math.floor(foodAmount * 0.4); // 40% para restaurante
-        const toSell = foodAmount - toExport;           // resto vende normal
+      // PLANTS LOGIC
+      if (warehouseFilled > 0.9 && plantsMat.stored > 0) {
+        const sellRate = plantsMat.stored * 0.9;
+        corp.sellMaterial(division, city, "Plants", sellRate, "MP");
+        ns.print(`⚠ Flush Plants in ${city}: Selling ${ns.formatNumber(sellRate)}`);
+      } else {
+        corp.sellMaterial(division, city, "Plants", "MAX", "MP");
+      }
 
-        if (toExport > 0) {
-          try {
-            corp.exportMaterial(division, city, restaurantDiv, city, "Food", toExport);
-          } catch (e) {
-            ns.print(`⚠ Failed to export Food from ${city}: ${e}`);
-          }
-        }
+      // FOOD LOGIC (SEND WHAT IT PRODUCES)
+      if (restaurantExistsInCity(city) && hasExportUnlock) {
+        // Export exactly what is being produced
+        const prodRate = foodMat.production.toFixed(2);
+        corp.exportMaterial(division, city, restaurantDiv, city, "Food", prodRate);
 
-        if (toSell > 0) {
-          corp.sellMaterial(division, city, "Food", toSell, "MP");
+        if (warehouseFilled > 0.9 && foodMat.stored > 0) {
+          const flushRate = foodMat.stored * 0.9;
+          corp.sellMaterial(division, city, "Food", flushRate, "MP");
+          ns.print(`⚠ Flush Food in ${city}: Selling ${ns.formatNumber(flushRate)}`);
+        } else {
+          // Sell 0 to market to ensure all production goes to Export
+          corp.sellMaterial(division, city, "Food", "0", "MP");
         }
       } else {
-        const foodAmount = corp.getMaterial(division, city, "Food").stored;
-        if (foodAmount > 0) corp.sellMaterial(division, city, "Food", "MAX", "MP");
+        if (warehouseFilled > 0.9 && foodMat.stored > 0) {
+          const sellRate = foodMat.stored * 0.9;
+          corp.sellMaterial(division, city, "Food", sellRate, "MP");
+          ns.print(`⚠ Flush Food in ${city}: Selling ${ns.formatNumber(sellRate)}`);
+        } else {
+          corp.sellMaterial(division, city, "Food", "MAX", "MP");
+        }
       }
 
       // --------- SMART SUPPLY ----------
-      if (!smartSupplyEnabled[city]) {
-        if (corp.hasUnlock("Smart Supply")) {
-          corp.setSmartSupply(division, city, true);
-          smartSupplyEnabled[city] = true;
-          ns.print(`💡 Smart Supply ENABLED immediately in ${city}`);
-        }
+      if (!smartSupplyEnabled[city] && corp.hasUnlock("Smart Supply")) {
+        corp.setSmartSupply(division, city, true);
+        smartSupplyEnabled[city] = true;
       }
 
       // --------- MAINTENANCE ----------
@@ -133,10 +136,10 @@ export async function main(ns) {
         if (office.avgMorale < 90) corp.throwParty(division, city, 50000);
       }
 
-      // --------- RESTORED LOGS ----------
+      // --------- STATUS LOGS ----------
       ns.print(
-        `${city} | Food: ${corp.getMaterial(division, city, "Food").stored.toFixed(1)} | ` +
-        `Plants: ${corp.getMaterial(division, city, "Plants").stored.toFixed(1)} | ` +
+        `${city} | Food: ${foodMat.stored.toFixed(1)} | ` +
+        `Plants: ${plantsMat.stored.toFixed(1)} | ` +
         `Rev: ${ns.formatNumber(divInfo.lastCycleRevenue)} | ` +
         `Exp: ${ns.formatNumber(divInfo.lastCycleExpenses)} | ` +
         `Profit: ${ns.formatNumber(lastProfit)} | ` +
