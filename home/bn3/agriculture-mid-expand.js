@@ -93,7 +93,7 @@ export async function main(ns) {
       if (warehouseFilled > 0.9 && plantsMat.stored > 0) {
         const sellRate = plantsMat.stored * 0.9;
         corp.sellMaterial(division, city, "Plants", sellRate, "MP");
-        ns.print(`⚠ Flush Plants in ${city}: Selling ${ns.formatNumber(sellRate)}`);
+        ns.print(`🟡 Flush Plants in ${city}: Selling ${ns.formatNumber(sellRate)}`);
       } else {
         corp.sellMaterial(division, city, "Plants", "MAX", "MP");
       }
@@ -107,7 +107,7 @@ export async function main(ns) {
         if (warehouseFilled > 0.9 && foodMat.stored > 0) {
           const flushRate = foodMat.stored * 0.9;
           corp.sellMaterial(division, city, "Food", flushRate, "MP");
-          ns.print(`⚠ Flush Food in ${city}: Selling ${ns.formatNumber(flushRate)}`);
+          ns.print(`🟡 Flush Food in ${city}: Selling ${ns.formatNumber(flushRate)}`);
         } else {
           // Sell 0 to market to ensure all production goes to Export
           corp.sellMaterial(division, city, "Food", "0", "MP");
@@ -116,7 +116,7 @@ export async function main(ns) {
         if (warehouseFilled > 0.9 && foodMat.stored > 0) {
           const sellRate = foodMat.stored * 0.9;
           corp.sellMaterial(division, city, "Food", sellRate, "MP");
-          ns.print(`⚠ Flush Food in ${city}: Selling ${ns.formatNumber(sellRate)}`);
+          ns.print(`🟡   Flush Food in ${city}: Selling ${ns.formatNumber(sellRate)}`);
         } else {
           corp.sellMaterial(division, city, "Food", "MAX", "MP");
         }

@@ -4,156 +4,142 @@ export async function main(ns) {
   const corp = ns.corporation;
 
   const DIV = "Foodies";
-  const CITY = "Sector-12";
+  const HQ = "Sector-12";
+
+  const cityOrder = [
+    "Sector-12",
+    "Aevum",
+    "Chongqing",
+    "New Tokyo",
+    "Ishima",
+    "Volhaven",
+  ];
 
   const OFFICE_SIZE = 9;
-  const DEV_INVEST = 5e8;   // per side
+  const MIN_FUNDS_FOR_EXPANSION = 14e9; // 14 Bilhões garantidos antes de expandir
   const CHECK = 5000;
 
-  // Track the total number of dishes to ensure unique names
-  let productCounter = corp.getDivision(DIV).products.length;
-
-  // JOB SPLITS
-  const DEV_JOBS = {
-    Operations: 3,
-    Engineer: 3,
-    Business: 1,
-    Management: 1,
-    "Research & Development": 1,
-  };
-
-  const PROD_JOBS = {
-    Operations: 4,
-    Engineer: 3,
-    Business: 1,
-    Management: 1,
-    "Research & Development": 0,
-  };
-
-  function ensureOffice() {
+  function ensureCity(city) {
     let office;
+    let funds = corp.getCorporation().funds;
+
+    // Tenta obter o escritório para ver se a cidade já existe
     try {
-      office = corp.getOffice(DIV, CITY);
+      office = corp.getOffice(DIV, city);
     } catch {
-      corp.expandCity(DIV, CITY);
-      corp.purchaseWarehouse(DIV, CITY);
-      office = corp.getOffice(DIV, CITY);
+      // Se a cidade NÃO existe, verifica se temos os 14B solicitados
+      if (funds < MIN_FUNDS_FOR_EXPANSION) {
+        ns.print(`💰 Waiting for 14B to expand to ${city} (Current: ${ns.formatNumber(funds)})`);
+        return false;
+      }
+
+      corp.expandCity(DIV, city);
+      corp.purchaseWarehouse(DIV, city);
+      ns.print(`✅ Expanded ${DIV} to ${city} and purchased warehouse.`);
+      office = corp.getOffice(DIV, city);
     }
 
+    // Gerenciamento de Warehouse (caso a cidade já exista mas não tenha warehouse)
+    try {
+      corp.getWarehouse(DIV, city);
+    } catch {
+      if (corp.getCorporation().funds > 1e9) {
+        corp.purchaseWarehouse(DIV, city);
+      }
+    }
+
+    // Upgrade de Office Size
+    office = corp.getOffice(DIV, city);
     if (office.size < OFFICE_SIZE) {
-      corp.upgradeOfficeSize(DIV, CITY, OFFICE_SIZE - office.size);
+      const upgradeCost = corp.getUpgradeOfficeSizeCost(DIV, city, OFFICE_SIZE - office.size);
+      if (corp.getCorporation().funds > upgradeCost) {
+        corp.upgradeOfficeSize(DIV, city, OFFICE_SIZE - office.size);
+        office = corp.getOffice(DIV, city);
+      }
     }
 
+    // Contratação de Funcionários
     while (office.numEmployees < OFFICE_SIZE) {
-      corp.hireEmployee(DIV, CITY);
-      office = corp.getOffice(DIV, CITY);
+      if (!corp.hireEmployee(DIV, city)) break;
+      office = corp.getOffice(DIV, city);
+    }
+
+    return true;
+  }
+
+  function expandCities() {
+    for (const city of cityOrder) {
+      // O script processa uma cidade por vez. Se não tiver os 14B para a próxima,
+      // ele não tenta expandir as subsequentes até que o critério seja atendido.
+      if (!ensureCity(city)) break;
     }
   }
 
-  function setJobs(jobMap) {
-    for (const job of Object.keys(jobMap)) {
-      corp.setAutoJobAssignment(DIV, CITY, job, 0);
-    }
-    for (const [job, count] of Object.entries(jobMap)) {
-      corp.setAutoJobAssignment(DIV, CITY, job, count);
-    }
-  }
-
-  function currentProduct() {
+  function handleProductsHQ() {
     const div = corp.getDivision(DIV);
-    return div.products.length > 0
-      ? div.products[div.products.length - 1]
-      : null;
-  }
+    const products = div.products;
 
-  function startNextProduct() {
-    const div = corp.getDivision(DIV);
+    if (products.length === 0) {
+      startProduct(1);
+      return;
+    }
 
-    // Limite de produtos
-    if (div.products.length >= 3) return;
+    const latestName = products[products.length - 1];
+    const latestProd = corp.getProduct(DIV, HQ, latestName);
 
-    // Descobrir o próximo índice REAL
+    const inDev = products.some(
+      p => corp.getProduct(DIV, HQ, p).developmentProgress < 100
+    );
+
+    if (inDev) return;
+
+    // DELAY LOGIC: Espera o produto ter qualidade/stats antes de rotacionar
+    if (latestProd.developmentProgress >= 100) {
+      if (latestProd.sName === "0") {
+        corp.sellProduct(DIV, HQ, latestName, "MAX", "MP", true);
+      }
+
+      if (latestProd.stats.quality <= 0) {
+        ns.print(`⏳ Waiting for ${latestName} to stabilize...`);
+        return;
+      }
+    }
+
+    if (products.length >= 3) {
+      const oldest = products[0];
+      ns.print(`🗑️ Cycling products. Discontinuing: ${oldest}`);
+      corp.discontinueProduct(DIV, oldest);
+    }
+
     let max = 0;
-    for (const p of div.products) {
+    for (const p of products) {
       const m = /Dish-(\d+)/.exec(p);
       if (m) max = Math.max(max, Number(m[1]));
     }
-    const nextIndex = max + 1;
-    const name = `Dish-${nextIndex}`;
 
-    // Segurança extra contra duplicata
-    if (div.products.includes(name)) return;
+    startProduct(max + 1);
+  }
 
-    const funds = corp.getCorporation().funds;
-    const cost = DEV_INVEST * 2;
-    if (funds < cost) return;
+  function startProduct(num) {
+    const name = `Dish-${num}`;
+    const invest = 5e8;
+    const totalCost = invest * 2;
 
-    corp.makeProduct(DIV, CITY, name, DEV_INVEST, DEV_INVEST);
+    if (corp.getCorporation().funds < totalCost) return;
+
+    corp.makeProduct(DIV, HQ, name, invest, invest);
     ns.print(`🆕 Started development of ${name}`);
   }
 
-
-  function handleProducts() {
-    const productName = currentProduct();
-
-    if (!productName) {
-      setJobs(DEV_JOBS);
-      startNextProduct();
-      return;
-    }
-
-    const p = corp.getProduct(DIV, CITY, productName);
-
-    if (p.developmentProgress < 100) {
-      setJobs(DEV_JOBS);
-      corp.sellProduct(DIV, CITY, productName, "0", "0");
-      return;
-    }
-
-    // Product is ready
-    setJobs(PROD_JOBS);
-    corp.sellProduct(DIV, CITY, productName, "MAX", "MP", true);
-
-    // If the latest product is finished, cycle to the next one
-    const div = corp.getDivision(DIV);
-    const inDev = div.products.some(
-      prod => corp.getProduct(DIV, CITY, prod).developmentProgress < 100
-    );
-
-    if (!inDev) {
-      startNextProduct();
-    }
-  }
-
-  function maintainMorale() {
-    const office = corp.getOffice(DIV, CITY);
-    if (office.avgEnergy < 90) corp.buyTea(DIV, CITY);
-    if (office.avgMorale < 90) corp.throwParty(DIV, CITY, 50000);
-  }
-
-  function logState() {
-    const div = corp.getDivision(DIV);
-    const name = currentProduct();
-    let dev = "-";
-
-    if (name) {
-      dev = corp.getProduct(DIV, CITY, name).developmentProgress.toFixed(1);
-    }
-
-    ns.print("================================");
-    ns.print(`ACTIVE PRODUCTS: ${div.products.length}/3`);
-    ns.print(`LATEST: ${name ?? "NONE"} | ${dev}%`);
-    ns.print(
-      `Rev: ${ns.formatNumber(div.lastCycleRevenue)} | ` +
-      `Profit: ${ns.formatNumber(div.lastCycleRevenue - div.lastCycleExpenses)}`
-    );
-  }
-
   while (true) {
-    ensureOffice();
-    handleProducts();
-    maintainMorale();
-    logState();
+    expandCities();
+    handleProductsHQ();
+
+    const divInfo = corp.getDivision(DIV);
+    ns.print("--------------------------------------");
+    ns.print(`Division: ${DIV} | Cities: ${divInfo.cities.length}/${cityOrder.length}`);
+    ns.print(`Profit: ${ns.formatNumber(divInfo.lastCycleRevenue - divInfo.lastCycleExpenses)}/s`);
+
     await ns.sleep(CHECK);
   }
 }
