@@ -68,31 +68,30 @@ export async function main(ns) {
 
   function startNextProduct() {
     const div = corp.getDivision(DIV);
-    const products = div.products;
 
-    // Logic to rotate products: if at limit (3), delete the oldest one
-    if (products.length >= 3) {
-      const oldestProduct = products[0];
-      ns.print(`🗑️ Discontinuing oldest product: ${oldestProduct}`);
-      corp.discontinueProduct(DIV, oldestProduct);
+    // Limite de produtos
+    if (div.products.length >= 3) return;
+
+    // Descobrir o próximo índice REAL
+    let max = 0;
+    for (const p of div.products) {
+      const m = /Dish-(\d+)/.exec(p);
+      if (m) max = Math.max(max, Number(m[1]));
     }
+    const nextIndex = max + 1;
+    const name = `Dish-${nextIndex}`;
 
-    productCounter++;
-    const name = `Dish-${productCounter}`;
+    // Segurança extra contra duplicata
+    if (div.products.includes(name)) return;
+
     const funds = corp.getCorporation().funds;
     const cost = DEV_INVEST * 2;
-
-    if (funds < cost) {
-      ns.print(
-        `⏸ Waiting funds for ${name}: ` +
-        `${ns.formatNumber(funds)} / ${ns.formatNumber(cost)}`
-      );
-      return;
-    }
+    if (funds < cost) return;
 
     corp.makeProduct(DIV, CITY, name, DEV_INVEST, DEV_INVEST);
     ns.print(`🆕 Started development of ${name}`);
   }
+
 
   function handleProducts() {
     const productName = currentProduct();
