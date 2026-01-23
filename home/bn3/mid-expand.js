@@ -94,11 +94,26 @@ export async function main(ns) {
       // --------- MATERIAL LOGIC ----------
       corp.sellMaterial(division, city, "Plants", "MAX", "MP");
 
+      // --------- FOOD LOGIC (40% para restaurante, 60% venda normal) ----------
       if (hasExportUnlock && restaurantExistsInCity(city)) {
-        corp.exportMaterial(division, city, restaurantDiv, city, "Food", "20");
-        corp.sellMaterial(division, city, "Food", "MAX", "MP");
+        const foodAmount = corp.getMaterial(division, city, "Food").stored;
+        const toExport = Math.floor(foodAmount * 0.4); // 40% para restaurante
+        const toSell = foodAmount - toExport;           // resto vende normal
+
+        if (toExport > 0) {
+          try {
+            corp.exportMaterial(division, city, restaurantDiv, city, "Food", toExport);
+          } catch (e) {
+            ns.print(`⚠ Failed to export Food from ${city}: ${e}`);
+          }
+        }
+
+        if (toSell > 0) {
+          corp.sellMaterial(division, city, "Food", toSell, "MP");
+        }
       } else {
-        corp.sellMaterial(division, city, "Food", "MAX", "MP");
+        const foodAmount = corp.getMaterial(division, city, "Food").stored;
+        if (foodAmount > 0) corp.sellMaterial(division, city, "Food", "MAX", "MP");
       }
 
       // --------- SMART SUPPLY ----------
