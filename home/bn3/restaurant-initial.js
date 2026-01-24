@@ -41,6 +41,11 @@ function ensureSmartSupply(ns, corp, div) {
 function handleOffices(ns, corp, div) {
   const division = corp.getDivision(div);
 
+  const profit = division.lastCycleRevenue - division.lastCycleExpenses;
+  ns.print(
+    `💰 [Total] Rev: ${ns.formatNumber(division.lastCycleRevenue)} | Exp: ${ns.formatNumber(division.lastCycleExpenses)} | Profit: ${ns.formatNumber(profit)}`
+  );
+
   for (const city of division.cities) {
     const office = corp.getOffice(div, city);
 
