@@ -1,4 +1,4 @@
-// VERSION: 1.4.2
+// VERSION: 1.4.3
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -39,7 +39,10 @@ export async function main(ns) {
         } else {
           ns.print(`🔋 Low Stamina: ${currentStamina.toFixed(1)}/${maxStamina}. Resting...`);
         }
-        bb.startAction("General", "Hyperbolic Regeneration Chamber");
+        const currentAction = bb.getCurrentAction();
+        if (currentAction.type !== "General" || currentAction.name !== "Hyperbolic Regeneration Chamber") {
+          bb.startAction("General", "Hyperbolic Regeneration Chamber");
+        }
         await ns.sleep(1000);
         break;
       }
