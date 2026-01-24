@@ -16,30 +16,26 @@ export async function main(ns) {
   ];
 
   const OFFICE_SIZE = 9;
-  const MIN_FUNDS_FOR_EXPANSION = 14e9; // 14 Bilhões garantidos antes de expandir
+  const MIN_FUNDS_FOR_EXPANSION = 14e9;
   const CHECK = 5000;
+
+  const PRODUCT_THRESHOLD_RATIO = 0.6;
 
   function ensureCity(city) {
     let office;
     let funds = corp.getCorporation().funds;
 
-    // Tenta obter o escritório para ver se a cidade já existe
     try {
       office = corp.getOffice(DIV, city);
     } catch {
-      // Se a cidade NÃO existe, verifica se temos os 14B solicitados
       if (funds < MIN_FUNDS_FOR_EXPANSION) {
         ns.print(`💰 Waiting for 14B to expand to ${city} (Current: ${ns.formatNumber(funds)})`);
         return false;
       }
-
       corp.expandCity(DIV, city);
       corp.purchaseWarehouse(DIV, city);
-      ns.print(`✅ Expanded ${DIV} to ${city} and purchased warehouse.`);
-      office = corp.getOffice(DIV, city);
     }
 
-    // Gerenciamento de Warehouse (caso a cidade já exista mas não tenha warehouse)
     try {
       corp.getWarehouse(DIV, city);
     } catch {
@@ -48,20 +44,21 @@ export async function main(ns) {
       }
     }
 
-    // Upgrade de Office Size
     office = corp.getOffice(DIV, city);
     if (office.size < OFFICE_SIZE) {
-      const upgradeCost = corp.getUpgradeOfficeSizeCost(DIV, city, OFFICE_SIZE - office.size);
-      if (corp.getCorporation().funds > upgradeCost) {
+      const cost = corp.getUpgradeOfficeSizeCost(
+        DIV,
+        city,
+        OFFICE_SIZE - office.size
+      );
+      if (corp.getCorporation().funds > cost) {
         corp.upgradeOfficeSize(DIV, city, OFFICE_SIZE - office.size);
-        office = corp.getOffice(DIV, city);
       }
     }
 
-    // Contratação de Funcionários
+    office = corp.getOffice(DIV, city);
     while (office.numEmployees < OFFICE_SIZE) {
       if (!corp.hireEmployee(DIV, city)) break;
-      office = corp.getOffice(DIV, city);
     }
 
     return true;
@@ -69,9 +66,38 @@ export async function main(ns) {
 
   function expandCities() {
     for (const city of cityOrder) {
-      // O script processa uma cidade por vez. Se não tiver os 14B para a próxima,
-      // ele não tenta expandir as subsequentes até que o critério seja atendido.
       if (!ensureCity(city)) break;
+    }
+  }
+
+  function productScore(prod) {
+    const s = prod.stats;
+    return s.quality * s.demand / Math.max(s.competition, 1);
+  }
+
+  function logProductsByCity(products) {
+    ns.print("=== PRODUCT SNAPSHOT ===");
+
+    for (const city of cityOrder) {
+      if (!corp.getDivision(DIV).cities.includes(city)) continue;
+
+      ns.print(`City: ${city}`);
+      for (const p of products) {
+        const prod = corp.getProduct(DIV, HQ, p);
+        const s = prod.stats;
+        const score = productScore(prod);
+
+        const status =
+          prod.developmentProgress < 100 ? "DEV" : "SELL";
+
+        ns.print(
+          `  ${p} | ${status}` +
+          ` | Q:${s.quality.toFixed(2)}` +
+          ` D:${s.demand.toFixed(2)}` +
+          ` C:${s.competition.toFixed(2)}` +
+          ` Score:${score.toFixed(2)}`
+        );
+      }
     }
   }
 
@@ -84,31 +110,48 @@ export async function main(ns) {
       return;
     }
 
-    const latestName = products[products.length - 1];
-    const latestProd = corp.getProduct(DIV, HQ, latestName);
-
     const inDev = products.some(
       p => corp.getProduct(DIV, HQ, p).developmentProgress < 100
     );
-
     if (inDev) return;
 
-    // DELAY LOGIC: Espera o produto ter qualidade/stats antes de rotacionar
-    if (latestProd.developmentProgress >= 100) {
-      if (latestProd.sName === "0") {
-        corp.sellProduct(DIV, HQ, latestName, "MAX", "MP", true);
+    let best = null;
+    let worst = null;
+    let bestScore = 0;
+    let worstScore = Infinity;
+
+    for (const p of products) {
+      const prod = corp.getProduct(DIV, HQ, p);
+      if (prod.developmentProgress < 100) continue;
+
+      if (prod.sName === "0") {
+        corp.sellProduct(DIV, HQ, p, "MAX", "MP", true);
       }
 
-      if (latestProd.stats.quality <= 0) {
-        ns.print(`⏳ Waiting for ${latestName} to stabilize...`);
-        return;
+      if (prod.stats.quality <= 0) return;
+
+      const score = productScore(prod);
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+      if (score < worstScore) {
+        worstScore = score;
+        worst = p;
       }
     }
 
-    if (products.length >= 3) {
-      const oldest = products[0];
-      ns.print(`🗑️ Cycling products. Discontinuing: ${oldest}`);
-      corp.discontinueProduct(DIV, oldest);
+    logProductsByCity(products);
+
+    if (
+      products.length >= 3 &&
+      worst &&
+      best &&
+      worstScore < bestScore * PRODUCT_THRESHOLD_RATIO
+    ) {
+      ns.print(`🗑️ Discontinuing ${worst}`);
+      corp.discontinueProduct(DIV, worst);
     }
 
     let max = 0;
@@ -123,12 +166,8 @@ export async function main(ns) {
   function startProduct(num) {
     const name = `Dish-${num}`;
     const invest = 5e8;
-    const totalCost = invest * 2;
-
-    if (corp.getCorporation().funds < totalCost) return;
-
+    if (corp.getCorporation().funds < invest * 2) return;
     corp.makeProduct(DIV, HQ, name, invest, invest);
-    ns.print(`🆕 Started development of ${name}`);
   }
 
   while (true) {
@@ -137,8 +176,12 @@ export async function main(ns) {
 
     const divInfo = corp.getDivision(DIV);
     ns.print("--------------------------------------");
-    ns.print(`Division: ${DIV} | Cities: ${divInfo.cities.length}/${cityOrder.length}`);
-    ns.print(`Profit: ${ns.formatNumber(divInfo.lastCycleRevenue - divInfo.lastCycleExpenses)}/s`);
+    ns.print(`Division: ${DIV}`);
+    ns.print(
+      `Profit: ${ns.formatNumber(
+        divInfo.lastCycleRevenue - divInfo.lastCycleExpenses
+      )}/s`
+    );
 
     await ns.sleep(CHECK);
   }
