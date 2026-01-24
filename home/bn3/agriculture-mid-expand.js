@@ -98,25 +98,29 @@ export async function main(ns) {
         corp.sellMaterial(division, city, "Plants", "MAX", "MP");
       }
 
-      // FOOD LOGIC (SEND WHAT IT PRODUCES)
+      // FOOD LOGIC (RESTRICTED EXPORT + SELL)
       if (restaurantExistsInCity(city) && hasExportUnlock) {
-        // Export exactly what is being produced
-        const prodRate = foodMat.production.toFixed(2);
-        corp.exportMaterial(division, city, restaurantDiv, city, "Food", prodRate);
+        // Define export amount
+        const drainRate = foodMat.stored > 0 ? (foodMat.stored * 0.1) : 0;
+        const totalExport = foodMat.production + drainRate;
 
-        if (warehouseFilled > 0.9 && foodMat.stored > 0) {
-          const flushRate = foodMat.stored * 0.9;
-          corp.sellMaterial(division, city, "Food", flushRate, "MP");
-          ns.print(`🟡 Flush Food in ${city}: Selling ${ns.formatNumber(flushRate)}`);
+        corp.exportMaterial(division, city, restaurantDiv, city, "Food", totalExport.toFixed(2));
+
+        // Restriction: Calculate what's left after export to avoid over-selling and forced buys
+        const maxAvailableToSell = Math.max(0, (foodMat.production + foodMat.stored) - totalExport - 0.1);
+
+        if (warehouseFilled > 0.95 && foodMat.stored > 100) {
+          const flushRate = Math.min(foodMat.stored * 0.5, maxAvailableToSell);
+          corp.sellMaterial(division, city, "Food", flushRate.toFixed(2), "MP");
+          ns.print(`🟡 Emergency Flush Food in ${city}: Selling ${ns.formatNumber(flushRate)}`);
         } else {
-          // Sell 0 to market to ensure all production goes to Export
           corp.sellMaterial(division, city, "Food", "0", "MP");
         }
       } else {
         if (warehouseFilled > 0.9 && foodMat.stored > 0) {
           const sellRate = foodMat.stored * 0.9;
-          corp.sellMaterial(division, city, "Food", sellRate, "MP");
-          ns.print(`🟡   Flush Food in ${city}: Selling ${ns.formatNumber(sellRate)}`);
+          corp.sellMaterial(division, city, "Food", sellRate.toFixed(2), "MP");
+          ns.print(`🟡 Flush Food in ${city}: Selling ${ns.formatNumber(sellRate)}`);
         } else {
           corp.sellMaterial(division, city, "Food", "MAX", "MP");
         }
