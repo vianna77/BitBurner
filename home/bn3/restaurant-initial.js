@@ -15,7 +15,7 @@ export async function main(ns) {
 
   while (true) {
     handleOffices(ns, corp, DIV);
-    logProductsByCity(ns, corp, DIV);
+    manageProducts(ns, corp, DIV);
     await corp.nextUpdate();
   }
 }
@@ -52,6 +52,22 @@ function handleOffices(ns, corp, div) {
       `Morale=${fmt(morale)} / ${office.maxMorale}`
     );
 
+    // 1. HIRE & ASSIGN (Fix "nem tendo que pagar funcionarios")
+    if (office.numEmployees < office.size) {
+      while (office.numEmployees < office.size) {
+        corp.hireEmployee(div, city);
+      }
+      // Auto assign basic setup for Restaurant
+      // Operations/Kitchen, Engineer, Business, Management
+      const share = Math.floor(office.size / 4);
+      if (share > 0) {
+        corp.setAutoJobAssignment(div, city, "Operations", share);
+        corp.setAutoJobAssignment(div, city, "Engineer", share);
+        corp.setAutoJobAssignment(div, city, "Business", share);
+        corp.setAutoJobAssignment(div, city, "Management", office.size - (share * 3));
+      }
+    }
+
     if (!Number.isFinite(energy) || !Number.isFinite(morale)) continue;
 
     if (energy < office.maxEnergy * 0.9) {
@@ -68,24 +84,47 @@ function handleOffices(ns, corp, div) {
 
 /* ---------------- PRODUCTS ---------------- */
 
-function logProductsByCity(ns, corp, div) {
+function manageProducts(ns, corp, div) {
   const division = corp.getDivision(div);
+  const products = division.products;
+  const mainCity = "Sector-12"; // Development HQ
 
-  for (const city of division.cities) {
-    for (const productName of division.products) {
-      const prod = corp.getProduct(div, city, productName);
+  // 1. MONITOR & SELL
+  let isDeveloping = false;
 
-      const revenue =
-        Number.isFinite(prod.revenue) ? prod.revenue : 0;
-      const expenses =
-        Number.isFinite(prod.expenses) ? prod.expenses : 0;
+  for (const prodName of products) {
+    const prod = corp.getProduct(div, mainCity, prodName);
 
-      const profit = revenue - expenses;
-
-      ns.print(
-        `[${city}] ${productName} | Profit=${ns.formatNumber(profit)}`
-      );
+    if (prod.developmentProgress < 100) {
+      isDeveloping = true;
+      ns.print(`🛠️ [DEV] ${prodName}: ${prod.developmentProgress.toFixed(1)}%`);
+    } else {
+      // Ensure it is selling (Fix "profit zero")
+      if (prod.sCost !== "MP") {
+        for (const city of division.cities) {
+          corp.sellProduct(div, city, prodName, "MAX", "MP", true);
+        }
+      }
+      // Log profit from main city as sample
+      ns.print(`✅ [SELL] ${prodName} | Rating: ${(prod.rating || 0).toFixed(0)} | Sell: ${ns.formatNumber(prod.actualSellAmount || 0)}`);
     }
+  }
+
+  // 2. CYCLE PRODUCTS (Create New / Delete Old)
+  if (!isDeveloping) {
+    // If full (3 products), delete oldest
+    if (products.length >= 3) {
+      const oldest = products[0];
+      ns.print(`🗑️ Discontinuing old product: ${oldest}`);
+      corp.discontinueProduct(div, oldest);
+    }
+
+    // Create new
+    const funds = corp.getCorporation().funds;
+    const invest = Math.max(1e7, Math.min(funds * 0.1, 1e9)); // 10% of funds, max 1B
+    const newName = "Dish " + (Date.now() % 10000); // Unique name
+    ns.print(`🆕 Starting development: ${newName} (Invest: ${ns.formatNumber(invest)})`);
+    corp.makeProduct(div, mainCity, newName, invest, invest);
   }
 }
 
