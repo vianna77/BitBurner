@@ -25,5 +25,11 @@
       "icon": "terminal-bash"
     }
   },
-  "terminal.integrated.defaultProfile.windows": "bash"
+  "terminal.integrated.defaultProfile.windows": "bash",
+  "geminicodeassist.enableTelemetry": false,
+  "geminicodeassist.checkpointing.enabled": false,
+  "google.gemini.checkpointing.enabled": false,
+  "gemini.checkpointing.enabled": false,
+  "google.gemini.checkpointing": false,
+  "google.checkpointing.enabled": false
 }
