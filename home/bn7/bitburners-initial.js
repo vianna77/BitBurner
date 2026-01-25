@@ -1,4 +1,4 @@
-// VERSION: 1.9.3
+// VERSION: 1.9.5
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -60,44 +60,50 @@ export async function main(ns) {
         break;
       }
       case "WORK": {
-        let bestContract = null;
-        let pChance = 0;
+        let selectedAction = null;
+        let actionType = "";
 
-        // 1. Retirement (Priority: Max Chance >= 100%)
-        if (bb.getActionCountRemaining("Contract", "Retirement") > 0) {
-          const [, max] = bb.getActionEstimatedSuccessChance("Contract", "Retirement");
-          if (max >= 1.0) {
-            bestContract = "Retirement";
-            pChance = max;
+        // Combined priority list: Operations are better than Contracts
+        const actions = [
+          { type: "Operation", name: "Assassination" },
+          { type: "Operation", name: "Undercover Operation" },
+          { type: "Operation", name: "Investigation" },
+          { type: "Contract", name: "Retirement" },
+          { type: "Contract", name: "Bounty Hunter" },
+          { type: "Contract", name: "Tracking" }
+        ];
+
+        for (const action of actions) {
+          if (bb.getActionCountRemaining(action.type, action.name) > 0) {
+            const [min] = bb.getActionEstimatedSuccessChance(action.type, action.name);
+            // Only select if it's 100% guaranteed to avoid failure penalties
+            if (min >= 1.0) {
+              selectedAction = action.name;
+              actionType = action.type;
+              break;
+            }
           }
         }
 
-        // 2. Bounty Hunter (Priority: Max Chance >= 100%)
-        if (!bestContract && bb.getActionCountRemaining("Contract", "Bounty Hunter") > 0) {
-          const [, max] = bb.getActionEstimatedSuccessChance("Contract", "Bounty Hunter");
-          if (max >= 1.0) {
-            bestContract = "Bounty Hunter";
-            pChance = max;
-          }
-        }
-
-        // 3. Tracking (Fallback)
-        if (!bestContract && bb.getActionCountRemaining("Contract", "Tracking") > 0) {
-          bestContract = "Tracking";
-          const [, max] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
-          pChance = max;
-        }
-
-        if (bestContract) {
-          ns.print(`🎯 ${bestContract} (Max: ${(pChance * 100).toFixed(0)}%) in ${currentCity}.`);
-          bb.startAction("Contract", bestContract);
-          const time = bb.getActionTime("Contract", bestContract);
-          await ns.sleep(time);
+        if (selectedAction) {
+          ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
+          bb.startAction(actionType, selectedAction);
+          const time = bb.getActionTime(actionType, selectedAction);
+          await ns.sleep(time + 100);
         } else {
-          const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
-          ns.print(`🟡 No contracts in ${currentCity}. Moving to ${nextCity}...`);
-          bb.switchCity(nextCity);
-          await ns.sleep(200);
+          // If no 100% action exists here, check if it's due to lack of intel
+          const [minTrack, maxTrack] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
+          if (maxTrack >= 1.0 && minTrack < 1.0) {
+            ns.print(`🔍 Uncertain data in ${currentCity}. Analyzing field...`);
+            bb.startAction("General", "Field Analysis");
+            await ns.sleep(bb.getActionTime("General", "Field Analysis") + 100);
+          } else {
+            // Move to next city to find 100% actions
+            const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
+            ns.print(`🟡 No safe work in ${currentCity}. Moving to ${nextCity}...`);
+            bb.switchCity(nextCity);
+            await ns.sleep(200);
+          }
         }
         break;
       }
