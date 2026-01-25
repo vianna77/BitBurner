@@ -1,4 +1,4 @@
-// VERSION: 1.9.1
+// VERSION: 1.9.3
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -95,7 +95,7 @@ export async function main(ns) {
           await ns.sleep(time);
         } else {
           const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
-          ns.print(`⚠️ No contracts in ${currentCity}. Moving to ${nextCity}...`);
+          ns.print(`🟡 No contracts in ${currentCity}. Moving to ${nextCity}...`);
           bb.switchCity(nextCity);
           await ns.sleep(200);
         }
