@@ -1,4 +1,5 @@
-// VERSION 1.2.0
+// VERSION 1.2.3
+// VERSION 1.2.5
 /**
  * Sleeve Task Dispatcher
  * Opens a popup to select an activity and applies it to all sleeves.
@@ -154,7 +155,7 @@ export async function main(ns) {
     }
     details = "Synchronization";
   } else if (activityType === "Bladeburner") {
-    const actionTypes = ["General", "Contracts", "Operations"];
+    const actionTypes = ["General", "Contracts", "Infiltrate Synthoids", "Support main sleeve"];
     const selectedType = await ns.prompt("Select Bladeburner action type:", {
       type: "select",
       choices: actionTypes
@@ -165,31 +166,45 @@ export async function main(ns) {
       return;
     }
 
-    let actions = [];
+    let actionName = "";
+    let contractName = "";
+
     if (selectedType === "General") {
-      actions = ["Training", "Field Analysis", "Recruitment", "Diplomacy", "Hyperbolic Regeneration Chamber"];
+      const actions = ["Training", "Field Analysis", "Recruitment", "Diplomacy", "Hyperbolic Regeneration Chamber"];
+      actionName = await ns.prompt("Select General Action:", {
+        type: "select",
+        choices: actions
+      });
+      if (!actionName) {
+        ns.tprint("🟡 Operation cancelled.");
+        return;
+      }
     } else if (selectedType === "Contracts") {
-      actions = ["Tracking", "Bounty Hunter", "Retirement"];
-    } else if (selectedType === "Operations") {
-      actions = ["Investigation", "Undercover Operation", "Sting Operation", "Raid", "Stealth Retirement Operation", "Assassination"];
-    }
-
-    const selectedAction = await ns.prompt(`Select ${selectedType} action:`, {
-      type: "select",
-      choices: actions
-    });
-
-    if (!selectedAction) {
-      ns.tprint("🟡 Operation cancelled.");
-      return;
+      const contracts = ["Tracking", "Bounty Hunter", "Retirement"];
+      contractName = await ns.prompt("Select Contract:", {
+        type: "select",
+        choices: contracts
+      });
+      if (!contractName) {
+        ns.tprint("🟡 Operation cancelled.");
+        return;
+      }
+      actionName = "Take on contracts";
+    } else {
+      // For "Infiltrate Synthoids" and "Support main sleeve"
+      actionName = selectedType;
     }
 
     for (let i = 0; i < numSleeves; i++) {
-      if (ns.sleeve.setToBladeburnerAction(i, selectedAction)) {
-        count++;
+      let success = false;
+      if (contractName) {
+        success = ns.sleeve.setToBladeburnerAction(i, actionName, contractName);
+      } else {
+        success = ns.sleeve.setToBladeburnerAction(i, actionName);
       }
+      if (success) count++;
     }
-    details = `Bladeburner: ${selectedAction}`;
+    details = `Bladeburner: ${actionName}` + (contractName ? ` - ${contractName}` : "");
   }
 
   ns.tprint(`✅ Success! ${count}/${numSleeves} sleeves assigned to: ${details}`);
