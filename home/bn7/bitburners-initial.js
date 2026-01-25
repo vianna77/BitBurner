@@ -1,4 +1,4 @@
-// VERSION: 1.9.5
+// VERSION: 1.9.6
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -86,6 +86,20 @@ export async function main(ns) {
         }
 
         if (selectedAction) {
+          if (actionType === "Operation") {
+            const operations = bb.getOperationNames();
+            for (const op of operations) {
+              if (op !== selectedAction) {
+                if (bb.getTeamSize("Operation", op) > 0) {
+                  bb.setTeamSize("Operation", op, 0);
+                }
+              }
+            }
+            const available = bb.getTeamSize();
+            const assigned = bb.getTeamSize("Operation", selectedAction);
+            bb.setTeamSize("Operation", selectedAction, available + assigned);
+          }
+
           ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
           bb.startAction(actionType, selectedAction);
           const time = bb.getActionTime(actionType, selectedAction);
