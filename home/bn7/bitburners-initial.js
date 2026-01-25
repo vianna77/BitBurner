@@ -1,4 +1,4 @@
-// VERSION: 1.8.1
+// VERSION: 1.9.1
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -8,12 +8,25 @@ const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ish
  * @param {NS} ns
  */
 export async function main(ns) {
+  // Check if script is already running
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "bn7/bitburners-initial.js" && p.pid !== ns.pid
+  );
+
+  if (runningProcesses.length > 0) {
+    ns.tprint("❌ ERROR: bn7/bitburners-initial.js is already running on home server!");
+    ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
+    ns.tprint("   Please kill the existing instance before starting a new one.");
+    return;
+  }
+
   const bb = ns.bladeburner;
   ns.disableLog("ALL");
 
   let state = "WORK";
 
   while (true) {
+    handleSkills(ns);
     const currentCity = bb.getCity();
 
     if (state === "WORK") {
@@ -103,4 +116,30 @@ function shouldRecover(ns) {
   const player = ns.getPlayer();
   const isLowHealth = player.hp.current <= player.hp.max * 0.5;
   return currentStamina < maxStamina * STAMINA_THRESHOLD || isLowHealth;
+}
+
+/**
+ * Handles automatic skill upgrades based on priority.
+ * @param {NS} ns
+ */
+function handleSkills(ns) {
+  const bb = ns.bladeburner;
+  const priorities = [
+    { name: "Blade's Intuition", count: 25 },
+    { name: "Cloak", count: 10 },
+    { name: "Short-Circuit", count: 10 },
+    { name: "Overclock", count: 10 }
+  ];
+
+  for (const skill of priorities) {
+    const currentLevel = bb.getSkillLevel(skill.name);
+    if (currentLevel < skill.count) {
+      const cost = bb.getSkillUpgradeCost(skill.name, 1);
+      if (bb.getSkillPoints() >= cost) {
+        bb.upgradeSkill(skill.name, 1);
+        ns.print(`🆙 Upgraded ${skill.name} to level ${currentLevel + 1}`);
+      }
+      return;
+    }
+  }
 }

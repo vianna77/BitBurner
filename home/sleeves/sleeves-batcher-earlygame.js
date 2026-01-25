@@ -33,7 +33,7 @@ export async function main(ns) {
     const runningProcesses = ns.ps("home").filter(p =>
       p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
     );
-    
+
     if (runningProcesses.length > 0) {
       ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running on home server!");
       ns.tprint(`   Existing PID: ${runningProcesses[0].pid}`);
@@ -170,7 +170,7 @@ export async function main(ns) {
           if (combatAvg > 30) return "Mug";
           return "Shoplift";
         };
-        
+
         const targetCrime = getCrimeForStats(stats);
         if (!task || task.type !== "CRIME" || task.crimeType !== targetCrime) {
           ns.print(`🔪 Sleeve ${i}: Upgrading crime ${task?.crimeType || 'none'} -> ${targetCrime}`);
