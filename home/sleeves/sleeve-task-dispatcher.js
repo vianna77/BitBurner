@@ -1,8 +1,8 @@
-// VERSION 1.2.3
-// VERSION 1.2.5
+// VERSION 1.2.6
 /**
  * Sleeve Task Dispatcher
  * Opens a popup to select an activity and applies it to all sleeves.
+ * Can also be used with arguments to bypass popups.
  *
  * Activities supported:
  * - Crime: Commits a selected crime
@@ -13,7 +13,8 @@
  * - Synchronize: Increases synchronization
  * - Bladeburner: Performs Bladeburner actions
  *
- * Usage: run sleeve-task-dispatcher.js
+ * Usage: run sleeve-task-dispatcher.js [activityType] [param1] [param2]
+ * Example: run sleeve-task-dispatcher.js "Travel" "New Tokyo"
  */
 
 /** @param {NS} ns */
@@ -25,10 +26,13 @@ export async function main(ns) {
     return;
   }
 
-  const activityType = await ns.prompt("Select activity type for ALL sleeves:", {
-    type: "select",
-    choices: ["Crime", "Gym", "University", "Travel", "Shock Recovery", "Synchronize", "Bladeburner"]
-  });
+  let activityType = ns.args[0];
+  if (!activityType) {
+    activityType = await ns.prompt("Select activity type for ALL sleeves:", {
+      type: "select",
+      choices: ["Crime", "Gym", "University", "Travel", "Shock Recovery", "Synchronize", "Bladeburner"]
+    });
+  }
 
   if (!activityType) {
     ns.tprint("🟡 Operation cancelled.");
@@ -40,10 +44,13 @@ export async function main(ns) {
 
   if (activityType === "Crime") {
     const crimes = ["Shoplift", "Rob Store", "Mug", "Larceny", "Deal Drugs", "Bond Forgery", "Traffick Arms", "Homicide", "Grand Theft Auto", "Kidnap", "Assassinate", "Heist"];
-    const selectedCrime = await ns.prompt("Select crime:", {
-      type: "select",
-      choices: crimes
-    });
+    let selectedCrime = ns.args[1];
+    if (!selectedCrime) {
+      selectedCrime = await ns.prompt("Select crime:", {
+        type: "select",
+        choices: crimes
+      });
+    }
 
     if (!selectedCrime) {
       ns.tprint("🟡 Operation cancelled.");
@@ -61,20 +68,26 @@ export async function main(ns) {
     const gyms = ["Powerhouse Gym", "Snap Fitness Gym", "Iron Gym", "Millenium Fitness Gym"];
     const stats = ["Strength", "Defense", "Dexterity", "Agility"];
 
-    const selectedGym = await ns.prompt("Select gym:", {
-      type: "select",
-      choices: gyms
-    });
+    let selectedGym = ns.args[1];
+    if (!selectedGym) {
+      selectedGym = await ns.prompt("Select gym:", {
+        type: "select",
+        choices: gyms
+      });
+    }
 
     if (!selectedGym) {
       ns.tprint("🟡 Operation cancelled.");
       return;
     }
 
-    const selectedStat = await ns.prompt("Select stat to train:", {
-      type: "select",
-      choices: stats
-    });
+    let selectedStat = ns.args[2];
+    if (!selectedStat) {
+      selectedStat = await ns.prompt("Select stat to train:", {
+        type: "select",
+        choices: stats
+      });
+    }
 
     if (!selectedStat) {
       ns.tprint("🟡 Operation cancelled.");
@@ -92,20 +105,26 @@ export async function main(ns) {
     const universities = ["Summit University", "Rothman University", "ZB Institute of Technology"];
     const courses = ["Study Computer Science", "Data Structures", "Networks", "Algorithms", "Management", "Leadership"];
 
-    const selectedUniversity = await ns.prompt("Select university:", {
-      type: "select",
-      choices: universities
-    });
+    let selectedUniversity = ns.args[1];
+    if (!selectedUniversity) {
+      selectedUniversity = await ns.prompt("Select university:", {
+        type: "select",
+        choices: universities
+      });
+    }
 
     if (!selectedUniversity) {
       ns.tprint("🟡 Operation cancelled.");
       return;
     }
 
-    const selectedCourse = await ns.prompt("Select course:", {
-      type: "select",
-      choices: courses
-    });
+    let selectedCourse = ns.args[2];
+    if (!selectedCourse) {
+      selectedCourse = await ns.prompt("Select course:", {
+        type: "select",
+        choices: courses
+      });
+    }
 
     if (!selectedCourse) {
       ns.tprint("🟡 Operation cancelled.");
@@ -122,10 +141,13 @@ export async function main(ns) {
   } else if (activityType === "Travel") {
     const cities = ["Aevum", "Chongqing", "Sector-12", "New Tokyo", "Ishima", "Volhaven"];
 
-    const selectedCity = await ns.prompt("Select destination city:", {
-      type: "select",
-      choices: cities
-    });
+    let selectedCity = ns.args[1];
+    if (!selectedCity) {
+      selectedCity = await ns.prompt("Select destination city:", {
+        type: "select",
+        choices: cities
+      });
+    }
 
     if (!selectedCity) {
       ns.tprint("🟡 Operation cancelled.");
@@ -156,10 +178,13 @@ export async function main(ns) {
     details = "Synchronization";
   } else if (activityType === "Bladeburner") {
     const actionTypes = ["General", "Contracts", "Infiltrate Synthoids", "Support main sleeve"];
-    const selectedType = await ns.prompt("Select Bladeburner action type:", {
-      type: "select",
-      choices: actionTypes
-    });
+    let selectedType = ns.args[1];
+    if (!selectedType) {
+      selectedType = await ns.prompt("Select Bladeburner action type:", {
+        type: "select",
+        choices: actionTypes
+      });
+    }
 
     if (!selectedType) {
       ns.tprint("🟡 Operation cancelled.");
@@ -171,20 +196,26 @@ export async function main(ns) {
 
     if (selectedType === "General") {
       const actions = ["Training", "Field Analysis", "Recruitment", "Diplomacy", "Hyperbolic Regeneration Chamber"];
-      actionName = await ns.prompt("Select General Action:", {
-        type: "select",
-        choices: actions
-      });
+      actionName = ns.args[2];
+      if (!actionName) {
+        actionName = await ns.prompt("Select General Action:", {
+          type: "select",
+          choices: actions
+        });
+      }
       if (!actionName) {
         ns.tprint("🟡 Operation cancelled.");
         return;
       }
     } else if (selectedType === "Contracts") {
       const contracts = ["Tracking", "Bounty Hunter", "Retirement"];
-      contractName = await ns.prompt("Select Contract:", {
-        type: "select",
-        choices: contracts
-      });
+      contractName = ns.args[2];
+      if (!contractName) {
+        contractName = await ns.prompt("Select Contract:", {
+          type: "select",
+          choices: contracts
+        });
+      }
       if (!contractName) {
         ns.tprint("🟡 Operation cancelled.");
         return;
