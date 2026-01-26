@@ -1,4 +1,4 @@
-// VERSION: 1.9.6
+// VERSION: 1.9.7
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -66,6 +66,9 @@ export async function main(ns) {
         // Combined priority list: Operations are better than Contracts
         const actions = [
           { type: "Operation", name: "Assassination" },
+          { type: "Operation", name: "Stealth Retirement Operation" },
+          { type: "Operation", name: "Raid" },
+          { type: "Operation", name: "Sting Operation" },
           { type: "Operation", name: "Undercover Operation" },
           { type: "Operation", name: "Investigation" },
           { type: "Contract", name: "Retirement" },
