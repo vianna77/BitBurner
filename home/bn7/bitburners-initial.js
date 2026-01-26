@@ -1,4 +1,4 @@
-// VERSION: 1.9.7
+// VERSION: 1.9.8
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -60,66 +60,74 @@ export async function main(ns) {
         break;
       }
       case "WORK": {
-        let selectedAction = null;
-        let actionType = "";
+        // 1. BLACK OPS (HIGHEST PRIORITY)
+        const nextBlackOp = bb.getNextBlackOp();
+        let blackOpStarted = false;
 
-        // Combined priority list: Operations are better than Contracts
-        const actions = [
-          { type: "Operation", name: "Assassination" },
-          { type: "Operation", name: "Stealth Retirement Operation" },
-          { type: "Operation", name: "Raid" },
-          { type: "Operation", name: "Sting Operation" },
-          { type: "Operation", name: "Undercover Operation" },
-          { type: "Operation", name: "Investigation" },
-          { type: "Contract", name: "Retirement" },
-          { type: "Contract", name: "Bounty Hunter" },
-          { type: "Contract", name: "Tracking" }
-        ];
+        if (nextBlackOp && bb.getRank() >= nextBlackOp.rank) {
+          const [minChance] = bb.getActionEstimatedSuccessChance("Black Operations", nextBlackOp.name);
+          if (minChance >= 1.0) {
+            ns.print(`⭐ Attempting BlackOp: ${nextBlackOp.name} (Rank: ${nextBlackOp.rank})`);
 
-        for (const action of actions) {
-          if (bb.getActionCountRemaining(action.type, action.name) > 0) {
-            const [min] = bb.getActionEstimatedSuccessChance(action.type, action.name);
-            // Only select if it's 100% guaranteed to avoid failure penalties
-            if (min >= 1.0) {
-              selectedAction = action.name;
-              actionType = action.type;
-              break;
+            // Un-assign team from any operations
+            const operations = bb.getOperationNames();
+            for (const op of operations) {
+              if (bb.getTeamSize("Operation", op) > 0) {
+                bb.setTeamSize("Operation", op, 0);
+              }
+            }
+
+            // Assign full team to BlackOp
+            const available = bb.getTeamSize();
+            bb.setTeamSize("Black Operations", nextBlackOp.name, available);
+
+            if (bb.startAction("Black Operations", nextBlackOp.name)) {
+              const time = bb.getActionTime("Black Operations", nextBlackOp.name);
+              await ns.sleep(time + 100);
+              blackOpStarted = true;
             }
           }
         }
 
-        if (selectedAction) {
-          if (actionType === "Operation") {
-            const operations = bb.getOperationNames();
-            for (const op of operations) {
-              if (op !== selectedAction) {
-                if (bb.getTeamSize("Operation", op) > 0) {
-                  bb.setTeamSize("Operation", op, 0);
+        // 2. REGULAR WORK (if no BlackOp was done)
+        if (!blackOpStarted) {
+          let selectedAction = null;
+          let actionType = "";
+
+
+          if (selectedAction) {
+            if (actionType === "Operation") {
+              const operations = bb.getOperationNames();
+              for (const op of operations) {
+                if (op !== selectedAction) {
+                  if (bb.getTeamSize("Operation", op) > 0) {
+                    bb.setTeamSize("Operation", op, 0);
+                  }
                 }
               }
+              const available = bb.getTeamSize();
+              const assigned = bb.getTeamSize("Operation", selectedAction);
+              bb.setTeamSize("Operation", selectedAction, available + assigned);
             }
-            const available = bb.getTeamSize();
-            const assigned = bb.getTeamSize("Operation", selectedAction);
-            bb.setTeamSize("Operation", selectedAction, available + assigned);
-          }
 
-          ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
-          bb.startAction(actionType, selectedAction);
-          const time = bb.getActionTime(actionType, selectedAction);
-          await ns.sleep(time + 100);
-        } else {
-          // If no 100% action exists here, check if it's due to lack of intel
-          const [minTrack, maxTrack] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
-          if (maxTrack >= 1.0 && minTrack < 1.0) {
-            ns.print(`🔍 Uncertain data in ${currentCity}. Analyzing field...`);
-            bb.startAction("General", "Field Analysis");
-            await ns.sleep(bb.getActionTime("General", "Field Analysis") + 100);
+            ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
+            bb.startAction(actionType, selectedAction);
+            const time = bb.getActionTime(actionType, selectedAction);
+            await ns.sleep(time + 100);
           } else {
-            // Move to next city to find 100% actions
-            const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
-            ns.print(`🟡 No safe work in ${currentCity}. Moving to ${nextCity}...`);
-            bb.switchCity(nextCity);
-            await ns.sleep(200);
+            // If no 100% action exists here, check if it's due to lack of intel
+            const [minTrack, maxTrack] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
+            if (maxTrack >= 1.0 && minTrack < 1.0) {
+              ns.print(`🔍 Uncertain data in ${currentCity}. Analyzing field...`);
+              bb.startAction("General", "Field Analysis");
+              await ns.sleep(bb.getActionTime("General", "Field Analysis") + 100);
+            } else {
+              // Move to next city to find 100% actions
+              const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
+              ns.print(`🟡 No safe work in ${currentCity}. Moving to ${nextCity}...`);
+              bb.switchCity(nextCity);
+              await ns.sleep(200);
+            }
           }
         }
         break;
