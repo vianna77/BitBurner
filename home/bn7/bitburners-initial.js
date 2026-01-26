@@ -1,4 +1,4 @@
-// VERSION: 1.9.8
+// VERSION: 1.9.9
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -94,6 +94,29 @@ export async function main(ns) {
           let selectedAction = null;
           let actionType = "";
 
+          // Combined priority list: Operations are better than Contracts
+          const actions = [
+            { type: "Operation", name: "Assassination" },
+            { type: "Operation", name: "Stealth Retirement Operation" },
+            { type: "Operation", name: "Raid" },
+            { type: "Operation", name: "Sting Operation" },
+            { type: "Operation", name: "Undercover Operation" },
+            { type: "Operation", name: "Investigation" },
+            { type: "Contract", name: "Retirement" },
+            { type: "Contract", name: "Bounty Hunter" },
+            { type: "Contract", name: "Tracking" }
+          ];
+
+          for (const action of actions) {
+            if (bb.getActionCountRemaining(action.type, action.name) > 0) {
+              const [min] = bb.getActionEstimatedSuccessChance(action.type, action.name);
+              if (min >= 1.0) {
+                selectedAction = action.name;
+                actionType = action.type;
+                break;
+              }
+            }
+          }
 
           if (selectedAction) {
             if (actionType === "Operation") {
