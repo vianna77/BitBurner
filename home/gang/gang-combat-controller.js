@@ -269,7 +269,7 @@ export async function main(ns) {
     printStatus(gang);
 
     if (ns.gang.canRecruitMember()) {
-      const name = `Fighter-${members.length + 1}`;
+      const name = `Member-${members.length + 1}`;
       ns.gang.recruitMember(name);
       ns.print(`${getTS()}[RECRUIT] 👥 ${name}`);
       members = ns.gang.getMemberNames();
