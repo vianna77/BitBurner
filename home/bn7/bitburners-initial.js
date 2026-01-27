@@ -1,4 +1,4 @@
-// VERSION: 1.9.9
+// VERSION: 1.9.10
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -108,7 +108,7 @@ export async function main(ns) {
           ];
 
           for (const action of actions) {
-            if (bb.getActionCountRemaining(action.type, action.name) > 0) {
+            if (bb.getActionCountRemaining(action.type, action.name) >= 1) {
               const [min] = bb.getActionEstimatedSuccessChance(action.type, action.name);
               if (min >= 1.0) {
                 selectedAction = action.name;
@@ -133,10 +133,14 @@ export async function main(ns) {
               bb.setTeamSize("Operation", selectedAction, available + assigned);
             }
 
-            ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
-            bb.startAction(actionType, selectedAction);
-            const time = bb.getActionTime(actionType, selectedAction);
-            await ns.sleep(time + 100);
+            if (bb.startAction(actionType, selectedAction)) {
+              ns.print(`🎯 ${selectedAction} (100%) in ${currentCity}.`);
+              const time = bb.getActionTime(actionType, selectedAction);
+              await ns.sleep(time + 100);
+            } else {
+              ns.print(`🔶 Failed to start ${selectedAction}. Re-evaluating...`);
+              await ns.sleep(100);
+            }
           } else {
             // If no 100% action exists here, check if it's due to lack of intel
             const [minTrack, maxTrack] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
