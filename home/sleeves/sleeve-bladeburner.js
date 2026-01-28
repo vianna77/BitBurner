@@ -1,12 +1,17 @@
-// VERSION: 1.1.0
+// VERSION: 1.5.0
 /**
  * Sleeve Bladeburner Manager
  *
- * DESCRIPTION:
- * - Assigns the first 3 sleeves (0-2) to unique Bladeburner contracts.
- * - Assigns all other sleeves (3+) to Field Analysis.
- * - Safety Check: If a contract's success chance drops below 100%, the sleeve switches to Field Analysis.
- * - Availability Check: If contracts run out, switch to Infiltrate Synthoids. Switch back only when > 50 contracts available.
+ * RULES:
+ * 1. Sleeve 0 -> Tracking
+ * 2. Sleeve 1 -> Bounty Hunter
+ * 3. Sleeve 2 -> Retirement
+ * 4. Sleeve 3+ -> Field Analysis
+ * 5. GLOBAL TRIGGER: If ANY of the 3 contract types reaches 0 count:
+ *    - ALL sleeves switch to "Infiltrate Synthoids".
+ *    - They stay on Infiltrate until ALL 3 contract types have >= 100 count.
+ * 6. SAFETY TRIGGER: If ANY of the 3 contract types has success chance < 100%:
+ *    - ALL sleeves switch to "Field Analysis" until ALL 3 types have 100% chance.
  *
  * USAGE:
  * run /sleeves/sleeve-bladeburner.js
@@ -16,91 +21,134 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
-  // Configuration
-  const CONTRACT_SLEEVES_COUNT = 3;
-  const CONTRACT_TYPES = ["Tracking", "Bounty Hunter", "Retirement"];
-
-  // Action Constants (based on sleeve-task-dispatcher.js logic)
   const ACTION_CONTRACTS = "Take on contracts";
   const ACTION_FIELD_ANALYSIS = "Field Analysis";
   const ACTION_INFILTRATE = "Infiltrate Synthoids";
   const TYPE_CONTRACT = "Contract";
 
-  ns.print("Starting Sleeve Bladeburner Manager...");
+  const CONTRACT_TYPES = ["Tracking", "Bounty Hunter", "Retirement"];
+
+  ns.print("Starting Sleeve Bladeburner Manager v1.5.0...");
+
+  // State variables to maintain hysteresis (the "until" logic)
+  let stateSafety = false;
+  let stateInfiltrate = false;
+
+  // Attempt to restore state from current actions on startup
+  const task0 = ns.sleeve.getTask(0);
+  if (task0 && task0.type === "BLADEBURNER") {
+    if (task0.actionName === ACTION_INFILTRATE) stateInfiltrate = true;
+    // Sleeve 0 only does Field Analysis in Safety Mode (normally it does Tracking)
+    if (task0.actionName === ACTION_FIELD_ANALYSIS) stateSafety = true;
+  }
 
   while (true) {
     const numSleeves = ns.sleeve.getNumSleeves();
 
+    // 1. Check Contract Counts & Chances
+    const counts = {};
+    let allCounts100 = true;
+    let anyCountZero = false;
+    let allChances100 = true;
+    let anyChanceLow = false;
+
+    for (const type of CONTRACT_TYPES) {
+      const count = ns.bladeburner.getActionCountRemaining(TYPE_CONTRACT, type);
+      const [minChance] = ns.bladeburner.getActionEstimatedSuccessChance(TYPE_CONTRACT, type);
+
+      counts[type] = count;
+
+      if (count < 100) allCounts100 = false;
+      if (count === 0) anyCountZero = true;
+
+      if (minChance < 1.0) {
+        allChances100 = false;
+        anyChanceLow = true;
+      }
+    }
+
+    // 2. Update States
+    // Safety Logic (Priority 1)
+    if (stateSafety) {
+      if (allChances100) stateSafety = false;
+    } else {
+      if (anyChanceLow) stateSafety = true;
+    }
+
+    // Infiltrate Logic (Priority 2)
+    if (stateInfiltrate) {
+      if (allCounts100) stateInfiltrate = false;
+    } else {
+      if (anyCountZero) stateInfiltrate = true;
+    }
+
+    // 3. Determine Global Action (if any)
+    let globalAction = null;
+
+    if (stateSafety) {
+      globalAction = ACTION_FIELD_ANALYSIS;
+      ns.print(`🛡️ Safety Mode: Chance < 100%. All Sleeves -> Field Analysis.`);
+    } else if (stateInfiltrate) {
+      globalAction = ACTION_INFILTRATE;
+      ns.print(`🕵️ Infiltrate Mode: Counts low ${JSON.stringify(counts)}. All Sleeves -> Infiltrate.`);
+    }
+
+    // 4. Assign Tasks
     for (let i = 0; i < numSleeves; i++) {
-      const currentTask = ns.sleeve.getTask(i);
-      let desiredAction = ACTION_FIELD_ANALYSIS;
+      let desiredAction = "";
       let desiredContract = null;
 
-      // Logic for the first 3 sleeves (indices 0, 1, 2)
-      if (i < CONTRACT_SLEEVES_COUNT) {
-        const contractType = CONTRACT_TYPES[i];
-
-        // Check success chance using Bladeburner API
-        // Returns [min, max] estimated success chance. We check min >= 1.0 (100%)
-        // Note: This uses the player's success chance as a proxy for environment safety (City Chaos)
-        const [successChance] = ns.bladeburner.getActionEstimatedSuccessChance(TYPE_CONTRACT, contractType);
-        const contractCount = ns.bladeburner.getActionCountRemaining(TYPE_CONTRACT, contractType);
-
-        // If chance is 100%, assign the contract
-        if (successChance >= 1.0) {
-          const isInfiltrating = currentTask && currentTask.type === "BLADEBURNER" && currentTask.actionName === ACTION_INFILTRATE;
-
-          if (isInfiltrating) {
-            // Hysteresis: Only switch back to contracts if > 50 available
-            if (contractCount > 50) {
-              desiredAction = ACTION_CONTRACTS;
-              desiredContract = contractType;
-            } else {
-              desiredAction = ACTION_INFILTRATE;
-            }
-          } else {
-            if (contractCount > 0) {
-              desiredAction = ACTION_CONTRACTS;
-              desiredContract = contractType;
-            } else {
-              desiredAction = ACTION_INFILTRATE;
-            }
-          }
+      if (globalAction) {
+        desiredAction = globalAction;
+      } else {
+        // Normal Mode Logic
+        if (i === 0) {
+          desiredAction = ACTION_CONTRACTS;
+          desiredContract = "Tracking";
+        } else if (i === 1) {
+          desiredAction = ACTION_CONTRACTS;
+          desiredContract = "Bounty Hunter";
+        } else if (i === 2) {
+          desiredAction = ACTION_CONTRACTS;
+          desiredContract = "Retirement";
         } else {
-          // If chance < 100%, fallback to Field Analysis to reduce chaos/gain intel
+          // Sleeve 3+
           desiredAction = ACTION_FIELD_ANALYSIS;
         }
       }
 
       // Check current task to avoid spamming the API
+      const currentTask = ns.sleeve.getTask(i);
       let isAlreadyAssigned = false;
 
       if (currentTask && currentTask.type === "BLADEBURNER") {
-        if (desiredAction === ACTION_FIELD_ANALYSIS && currentTask.actionName === ACTION_FIELD_ANALYSIS) {
-          isAlreadyAssigned = true;
-        } else if (desiredAction === ACTION_CONTRACTS && currentTask.actionName === desiredContract) {
-          isAlreadyAssigned = true;
-        } else if (desiredAction === ACTION_INFILTRATE && currentTask.actionName === ACTION_INFILTRATE) {
-          isAlreadyAssigned = true;
+        if (desiredAction === ACTION_CONTRACTS) {
+          if (currentTask.actionName === desiredContract) isAlreadyAssigned = true;
+        } else {
+          if (currentTask.actionName === desiredAction) isAlreadyAssigned = true;
         }
       }
 
-      // Apply task if needed
       if (!isAlreadyAssigned) {
+        let success = false;
         if (desiredAction === ACTION_CONTRACTS) {
-          const success = ns.sleeve.setToBladeburnerAction(i, desiredAction, desiredContract);
+          success = ns.sleeve.setToBladeburnerAction(i, desiredAction, desiredContract);
           if (success) {
             ns.print(`✅ Sleeve ${i}: Assigned to ${desiredContract}`);
+          } else {
+            ns.print(`❌ Sleeve ${i}: Failed to assign ${desiredContract}`);
           }
         } else {
-          const success = ns.sleeve.setToBladeburnerAction(i, desiredAction);
+          success = ns.sleeve.setToBladeburnerAction(i, desiredAction);
           if (success) {
             ns.print(`👉 Sleeve ${i}: Assigned to ${desiredAction}`);
+          } else {
+            ns.print(`❌ Sleeve ${i}: Failed to assign ${desiredAction}`);
           }
         }
       }
     }
 
-    await ns.sleep(5000); // Check every 5 seconds
+    await ns.sleep(2000);
   }
 }
