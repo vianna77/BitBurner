@@ -7,23 +7,23 @@ export async function main(ns) {
 
   const DISPATCHER_SCRIPT = "/sleeves/sleeve-task-dispatcher.js";
 
-  // Configuração dos Sleeves e Contratos (Regras 1, 2, 3)
+  // Sleeve and Contract Configuration (Rules 1, 2, 3)
   const CONTRACT_RULES = [
     { id: 0, name: "Tracking" },
     { id: 1, name: "Bounty Hunter" },
     { id: 2, name: "Retirement" }
   ];
 
-  // Estado inicial
-  let currentState = "START"; // Estados possíveis: START, NORMAL, SAFETY, INFILTRATE
+  // Initial state
+  let currentState = "START"; // Possible states: START, NORMAL, SAFETY, INFILTRATE
 
-  ns.print("🤖 Sleeve Bladeburner Controller v2.2.1 Iniciado");
+  ns.print("🤖 Sleeve Bladeburner Controller v2.2.1 Started");
 
   while (true) {
     const bb = ns.bladeburner;
 
     // ============================================================
-    // 1. ANÁLISE DE DADOS (OBSERVATION)
+    // 1. DATA ANALYSIS (OBSERVATION)
     // ============================================================
     let minChance = 1.0;
     let anyContractEmpty = false;
@@ -31,11 +31,11 @@ export async function main(ns) {
     let minContractCount = Infinity;
 
     for (const rule of CONTRACT_RULES) {
-      // Verificar chance de sucesso (Regra 6)
+      // Check success chance (Rule 6)
       const [low, high] = bb.getActionEstimatedSuccessChance("Contract", rule.name);
       if (low < minChance) minChance = low;
 
-      // Verificar quantidade restante (Regra 5)
+      // Check remaining count (Rule 5)
       const count = bb.getActionCountRemaining("Contract", rule.name);
       if (count < 1) anyContractEmpty = true;
       if (count < 100) allContractsFull = false;
@@ -43,7 +43,7 @@ export async function main(ns) {
     }
 
     // ============================================================
-    // 2. LÓGICA DE TRANSIÇÃO (TRANSITION)
+    // 2. TRANSITION LOGIC (TRANSITION)
     // ============================================================
     let nextState = currentState;
 
@@ -51,27 +51,27 @@ export async function main(ns) {
       nextState = "NORMAL";
     }
 
-    // REGRA 6: SEGURANÇA (Prioridade Máxima)
-    // Se a chance cair < 100%, ativa SAFETY imediatamente.
+    // RULE 6: SAFETY (Top Priority)
+    // If chance drops below 100%, activate SAFETY immediately.
     if (minChance < 1.0) {
       if (currentState !== "SAFETY") {
         nextState = "SAFETY";
       }
     }
-    // Se já está em SAFETY, só sai quando TODOS voltarem a 100%.
+    // If already in SAFETY, only exit when ALL return to 100%.
     else if (currentState === "SAFETY") {
       if (minChance >= 1.0) {
         nextState = "NORMAL";
       }
     }
-    // REGRA 5: REABASTECIMENTO (Prioridade Secundária)
-    // Só considera se não estivermos em SAFETY (ou precisando ir para lá).
+    // RULE 5: RESUPPLY (Secondary Priority)
+    // Only consider if not in SAFETY (or needing to go there).
     else {
-      // Se qualquer contrato acabar, vai para INFILTRATE
+      // If any contract runs out, go to INFILTRATE
       if (currentState !== "INFILTRATE" && anyContractEmpty) {
         nextState = "INFILTRATE";
       }
-      // Se já está em INFILTRATE, só sai quando TODOS tiverem >= 100
+      // If already in INFILTRATE, only exit when ALL have >= 100
       else if (currentState === "INFILTRATE") {
         if (allContractsFull) {
           nextState = "NORMAL";
@@ -80,61 +80,61 @@ export async function main(ns) {
     }
 
     // ============================================================
-    // 3. EXECUÇÃO DE MUDANÇA DE ESTADO (ACTION ON CHANGE)
+    // 3. STATE CHANGE EXECUTION (ACTION ON CHANGE)
     // ============================================================
     if (nextState !== currentState) {
-      ns.print(`🔄 Estado alterado: ${currentState} -> ${nextState}`);
+      ns.print(`🔄 State changed: ${currentState} -> ${nextState}`);
 
       if (nextState === "SAFETY") {
-        ns.print(`⚠️ Chance baixa detectada (${(minChance * 100).toFixed(1)}%). Executando Field Analysis.`);
-        // Regra 6: Executa dispatcher para Field Analysis
+        ns.print(`⚠️ Low chance detected (${(minChance * 100).toFixed(1)}%). Executing Field Analysis.`);
+        // Rule 6: Execute dispatcher for Field Analysis
         ns.run(DISPATCHER_SCRIPT, 1, "Bladeburner", "General", "Field Analysis");
       }
       else if (nextState === "INFILTRATE") {
-        ns.print(`📉 Contratos esgotados. Executando Infiltrate Synthoids.`);
-        // Regra 5: Executa dispatcher para Infiltrate Synthoids
+        ns.print(`📉 Contracts depleted. Executing Infiltrate Synthoids.`);
+        // Rule 5: Execute dispatcher for Infiltrate Synthoids
         ns.run(DISPATCHER_SCRIPT, 1, "Bladeburner", "Infiltrate Synthoids");
       }
       else if (nextState === "NORMAL") {
-        ns.print(`✅ Operação normal retomada.`);
+        ns.print(`✅ Normal operation resumed.`);
       }
 
       currentState = nextState;
-      // Pequena pausa para garantir que o dispatcher inicie e aplique as tarefas
+      // Short pause to ensure dispatcher starts and applies tasks
       await ns.sleep(500);
     }
 
     // ============================================================
-    // 4. MANUTENÇÃO DO ESTADO (STATE MAINTENANCE)
+    // 4. STATE MAINTENANCE
     // ============================================================
     if (currentState === "NORMAL") {
       const numSleeves = ns.sleeve.getNumSleeves();
 
       for (let i = 0; i < numSleeves; i++) {
-        // Regra 1: Sleeve 0 -> Tracking
+        // Rule 1: Sleeve 0 -> Tracking
         if (i === 0) {
           ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
         }
-        // Regra 2: Sleeve 1 -> Bounty Hunter
+        // Rule 2: Sleeve 1 -> Bounty Hunter
         else if (i === 1) {
           ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
         }
-        // Regra 3: Sleeve 2 -> Retirement
+        // Rule 3: Sleeve 2 -> Retirement
         else if (i === 2) {
           ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
         }
-        // Regra 4: Sleeve 3 e 4 (e demais) -> Field Analysis
+        // Rule 4: Sleeve 3 and 4 (and others) -> Field Analysis
         else {
           ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
         }
       }
     } else {
-      // Em SAFETY ou INFILTRATE, apenas monitoramos e logamos periodicamente
-      // O dispatcher já definiu as tarefas na transição de estado.
+      // In SAFETY or INFILTRATE, only monitor and log periodically
+      // The dispatcher has already defined tasks on state transition.
       if (currentState === "SAFETY") {
-        ns.print(`🛡️ SAFETY: Recuperando chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
+        ns.print(`🛡️ SAFETY: Recovering chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
       } else if (currentState === "INFILTRATE") {
-        ns.print(`🕵️ INFILTRATE: Farmando contratos... (Min: ${minContractCount}/100)`);
+        ns.print(`🕵️ INFILTRATE: Farming contracts... (Min: ${minContractCount}/100)`);
       }
     }
 
