@@ -38,7 +38,6 @@ export async function main(ns) {
         cores,
         ns.getBitNodeMultipliers().HacknetHashes
       );
-      ns.print(`DEBUG getHashProd returns: ${ret}`);
       return ret;
     }
 
