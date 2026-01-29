@@ -1,5 +1,5 @@
 /**
- * SERVER MONITOR - v1.4.0
+ * SERVER MONITOR - v1.4.1
  * DESCRIPTION:
  * Real-time monitoring of hacked servers with money tracking and visual indicators.
  * Shows current vs max money with color-coded changes and active hacking status.
@@ -45,6 +45,13 @@ export async function main(ns) {
     const purchased = ns.getPurchasedServers();
     const servers = scanAll(ns);
 
+    // Build hacknet server list using the API for robustness
+    const hacknetServers = [];
+    const numNodes = ns.hacknet.numNodes();
+    for (let i = 0; i < numNodes; i++) {
+      hacknetServers.push(`hacknet-server-${i}`);
+    }
+
     // 1 — Collect and Filter
     let hacked = servers
       .filter(s => ns.hasRootAccess(s) && ns.getServerMaxMoney(s) > 0)
@@ -57,7 +64,7 @@ export async function main(ns) {
     // 2 — Sorting by Max Money
     hacked.sort((a, b) => a.maxMoney - b.maxMoney);
 
-    ns.print("--- SERVER MONITOR v1.4.0 (Single Object State) ---");
+    ns.print("--- SERVER MONITOR v1.4.1 (Single Object State) ---");
     ns.print("----------------------------------------------------------------------------------");
 
     let id = 1;
@@ -89,6 +96,8 @@ export async function main(ns) {
         flag += " ➡ [OK] simple local";
       }
 
+      const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js", "smart/smartMomentumMaker.js                                                                         "];
+
       // Purchased server check (Dual Target logic)
       const pServer = purchased.find(p => {
         const targets = p.replace(/^p-/, "").split("_");
@@ -97,11 +106,19 @@ export async function main(ns) {
 
       if (pServer) {
         flag += " ➡ [OK] ✔ p- server found";
-        const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js", "smart/smartMomentumMaker.js"];
         const isRunning = scripts.some(script => ns.isRunning(script, pServer, s.name));
         if (isRunning) {
           flag += " [OK] ✔ hacking!";
         }
+      }
+
+      // Hacknet check
+      const isHnRunning = hacknetServers.some(hn =>
+        scripts.some(script => ns.isRunning(script, hn, s.name))
+      );
+
+      if (isHnRunning) {
+        flag += " [OK] ✔ hacknet hacking!";
       }
 
       // Get stock symbol if available
