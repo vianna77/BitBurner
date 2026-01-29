@@ -96,7 +96,7 @@ export async function main(ns) {
         flag += " ➡ [OK] simple local";
       }
 
-      const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js", "smart/smartMomentumMaker.js                                                                         "];
+      const scripts = ["smart/smartBatchWithFormula.js", "smart/smartBatchNoFormula.js", "smart/smartBatchWithFormulaQ.js"];
 
       // Purchased server check (Dual Target logic)
       const pServer = purchased.find(p => {
