@@ -1,4 +1,4 @@
-// VERSION 1.3.0
+// VERSION 1.4.0
 /**
  * This script handles the grafting of specified augmentations.
  * It processes one augmentation completely (start and wait for completion)
@@ -43,7 +43,7 @@ export async function main(ns) {
 
   // --- HEADER ---
   ns.print("=================================================");
-  ns.print("GRAFT MASTER v1.3.0");
+  ns.print("GRAFT MASTER v1.4.0");
   ns.print(`Grafting Queue: ${augmentationsToGraft.length} augmentation(s)`);
   augmentationsToGraft.forEach((aug, i) => ns.print(`  ${i + 1}. ${aug}`));
   ns.print("=================================================");
@@ -66,6 +66,13 @@ export async function main(ns) {
   for (const augName of augmentationsToGraft) {
     ns.print("-------------------------------------------------");
     ns.print(`${getTS()}[INFO] ⚙️ Processing augmentation: ${augName}`);
+
+    // Check if augmentation is already installed
+    const ownedAugs = ns.singularity.getOwnedAugmentations(true);
+    if (ownedAugs.includes(augName)) {
+      ns.print(`${getTS()}[SKIP] ⏭️ ${augName} is already installed. Skipping.`);
+      continue;
+    }
 
     // Safety check: ensure no other graft is running before we start.
     // This handles cases where the script is started while a graft is
