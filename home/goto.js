@@ -1,4 +1,4 @@
-// VERSION: 1.4.1
+// VERSION: 1.6.0
 //
 // PURPOSE: Navigate to any server in the network and optionally install backdoor
 // PARAMETERS:
@@ -19,7 +19,7 @@ export function autocomplete(data, args) {
 export async function main(ns) {
   // --- SCRIPT SUMMARY AND INTENTION ---
   ns.tprint("=======================================");
-  ns.tprint("🚀 Goto Script (v1.4.1)");
+  ns.tprint("🚀 Goto Script (v1.6.0)");
   ns.tprint("---------------------------------------");
   ns.tprint("Intention: Find path from home, auto-connect and propagate.");
   ns.tprint("Parameters: [target_server] [do_backdoor (default: true)]");
@@ -93,7 +93,12 @@ export async function main(ns) {
 
     // Backdoor logic with Admin check
     if (doBackdoor) {
-      if (ns.hasRootAccess(target)) {
+      const serverInfo = ns.getServer(target);
+      const isPlayerServer = serverInfo.organizationName === "player";
+
+      if (isPlayerServer) {
+        ns.tprint(`🟡 Skipping backdoor: ${target} is a player-owned server.`);
+      } else if (ns.hasRootAccess(target)) {
         ns.tprint(`Attempting to install backdoor on ${target}...`);
         await ns.singularity.installBackdoor();
         ns.tprint("Backdoor installation process completed.");
