@@ -28,7 +28,8 @@ export async function main(ns) {
     "Xanipher",
     "SPTN-97 Gene Modification",
     "OmniTek InfoLoad",
-    "ECorp HVMind Implant"
+    "ECorp HVMind Implant",
+    "CordiARC Fusion Reactor"
   ];
   const travelCity = "New Tokyo";
   const waitInterval = 30000; // 30 seconds
