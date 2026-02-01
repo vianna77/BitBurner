@@ -25,11 +25,11 @@ export async function main(ns) {
 
   // --- CONFIGURATION ---
   const defaultAugmentations = [
-    "Xanipher",
     "SPTN-97 Gene Modification",
-    "OmniTek InfoLoad",
+    "CordiARC Fusion Reactor",
+    "Xanipher",
     "ECorp HVMind Implant",
-    "CordiARC Fusion Reactor"
+    "OmniTek InfoLoad",
   ];
   const travelCity = "New Tokyo";
   const waitInterval = 30000; // 30 seconds
