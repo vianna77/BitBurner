@@ -94,7 +94,10 @@ export async function main(ns) {
     // Backdoor logic with Admin check
     if (doBackdoor) {
       const serverInfo = ns.getServer(target);
-      const isPlayerServer = serverInfo.organizationName === "player";
+      ns.tprint("=== SERVER INFO DEBUG ===");
+      ns.tprint(JSON.stringify(serverInfo, null, 2));
+      ns.tprint("=========================");
+      const isPlayerServer = serverInfo.organizationName === "";
 
       if (isPlayerServer) {
         ns.tprint(`🟡 Skipping backdoor: ${target} is a player-owned server.`);
