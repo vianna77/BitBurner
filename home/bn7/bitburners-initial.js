@@ -1,4 +1,4 @@
-// VERSION: 1.9.10
+// VERSION: 1.9.11
 const CITIES = ["Sector-12", "Aevum", "Volhaven", "Chongqing", "New Tokyo", "Ishima"];
 
 /**
@@ -142,19 +142,11 @@ export async function main(ns) {
               await ns.sleep(100);
             }
           } else {
-            // If no 100% action exists here, check if it's due to lack of intel
-            const [minTrack, maxTrack] = bb.getActionEstimatedSuccessChance("Contract", "Tracking");
-            if (maxTrack >= 1.0 && minTrack < 1.0) {
-              ns.print(`🔍 Uncertain data in ${currentCity}. Analyzing field...`);
-              bb.startAction("General", "Field Analysis");
-              await ns.sleep(bb.getActionTime("General", "Field Analysis") + 100);
-            } else {
-              // Move to next city to find 100% actions
-              const nextCity = CITIES[(CITIES.indexOf(currentCity) + 1) % CITIES.length];
-              ns.print(`🟡 No safe work in ${currentCity}. Moving to ${nextCity}...`);
-              bb.switchCity(nextCity);
-              await ns.sleep(200);
-            }
+            // If no 100% action is available, default to Field Analysis.
+            // This gathers intel, improves success chances, and prevents endless city-switching.
+            ns.print(`🟡 No safe work in ${currentCity}. Performing Field Analysis...`);
+            bb.startAction("General", "Field Analysis");
+            await ns.sleep(bb.getActionTime("General", "Field Analysis") + 100);
           }
         }
         break;
