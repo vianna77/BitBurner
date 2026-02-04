@@ -1,4 +1,4 @@
-// VERSION: 2.2.2
+// VERSION: 2.3.0
 // Sleeve Bladeburner Controller - Strict Rules Implementation
 
 /** @param {NS} ns */
@@ -17,7 +17,7 @@ export async function main(ns) {
   // Initial state
   let currentState = "START"; // Possible states: START, NORMAL, SAFETY, INFILTRATE
 
-  ns.print("🤖 Sleeve Bladeburner Controller v2.2.2 Started");
+  ns.print("🤖 Sleeve Bladeburner Controller v2.3.0 Started");
 
   while (true) {
     const bb = ns.bladeburner;
@@ -114,26 +114,34 @@ export async function main(ns) {
         const task = ns.sleeve.getTask(i);
         const isBladeburner = task && task.type === "BLADEBURNER";
 
-        // Rule 1: Sleeve 0 -> Tracking
-        if (i === 0) {
-          if (!isBladeburner || task.actionName !== "Tracking") {
-            ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
+        // Only execute contracts if chance is 100%
+        if (minChance >= 1.0) {
+          // Rule 1: Sleeve 0 -> Tracking
+          if (i === 0) {
+            if (!isBladeburner || task.actionName !== "Tracking") {
+              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
+            }
           }
-        }
-        // Rule 2: Sleeve 1 -> Bounty Hunter
-        else if (i === 1) {
-          if (!isBladeburner || task.actionName !== "Bounty Hunter") {
-            ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
+          // Rule 2: Sleeve 1 -> Bounty Hunter
+          else if (i === 1) {
+            if (!isBladeburner || task.actionName !== "Bounty Hunter") {
+              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
+            }
           }
-        }
-        // Rule 3: Sleeve 2 -> Retirement
-        else if (i === 2) {
-          if (!isBladeburner || task.actionName !== "Retirement") {
-            ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
+          // Rule 3: Sleeve 2 -> Retirement
+          else if (i === 2) {
+            if (!isBladeburner || task.actionName !== "Retirement") {
+              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
+            }
           }
-        }
-        // Rule 4: Sleeve 3 and 4 (and others) -> Field Analysis
-        else {
+          // Rule 4: Sleeve 3 and 4 (and others) -> Field Analysis
+          else {
+            if (!isBladeburner || task.actionName !== "Field Analysis") {
+              ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
+            }
+          }
+        } else {
+          // If chance < 100%, all sleeves do Field Analysis
           if (!isBladeburner || task.actionName !== "Field Analysis") {
             ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
           }

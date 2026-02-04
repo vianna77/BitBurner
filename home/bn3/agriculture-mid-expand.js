@@ -42,10 +42,12 @@ export async function main(ns) {
     ns.print("--------------------------------------");
 
     for (const city of cityOrder) {
+      const divisionInfo = corp.getDivision(division);
       let office;
-      try {
+
+      if (divisionInfo.cities.includes(city)) {
         office = corp.getOffice(division, city);
-      } catch {
+      } else {
         if (corpInfo.funds < EXPANSION_COST) {
           ns.print(`💰 Waiting to expand to ${city} (need 4B)`);
           continue;
