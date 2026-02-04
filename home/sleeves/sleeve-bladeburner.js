@@ -20,143 +20,152 @@ export async function main(ns) {
   ns.print("🤖 Sleeve Bladeburner Controller v2.3.0 Started");
 
   while (true) {
+    ns.print(`\n--- LOOP START --- Current State: ${currentState} ---`);
     const bb = ns.bladeburner;
 
     // ============================================================
     // 1. DATA ANALYSIS (OBSERVATION)
     // ============================================================
-    let minChance = 1.0;
+    let minChance = Infinity;
     let anyContractEmpty = false;
-    let allContractsFull = true; // >= 100
+    let allContractsFull = true;
     let minContractCount = Infinity;
-
+    ns.print(`[DATA] Analyzing contracts...`);
     for (const rule of CONTRACT_RULES) {
-      // Check success chance (Rule 6)
       const [low, high] = bb.getActionEstimatedSuccessChance("Contract", rule.name);
+      ns.print(`[DATA] Contract '${rule.name}' success chance: [${(low * 100).toFixed(2)}% - ${(high * 100).toFixed(2)}%]`);
       if (low < minChance) minChance = low;
 
-      // Check remaining count (Rule 5)
       const count = bb.getActionCountRemaining("Contract", rule.name);
       if (count < 1) anyContractEmpty = true;
       if (count < 100) allContractsFull = false;
       if (count < minContractCount) minContractCount = count;
     }
+    ns.print(`[DATA] Overall minChance: ${(minChance * 100).toFixed(2)}% | anyContractEmpty: ${anyContractEmpty} | allContractsFull: ${allContractsFull}`);
 
     // ============================================================
     // 2. TRANSITION LOGIC (TRANSITION)
     // ============================================================
     let nextState = currentState;
+    if (currentState === "START") nextState = "NORMAL";
 
-    if (currentState === "START") {
-      nextState = "NORMAL";
-    }
-
-    // RULE 6: SAFETY (Top Priority)
-    // If chance drops below 100%, activate SAFETY immediately.
     if (minChance < 1.0) {
-      if (currentState !== "SAFETY") {
-        nextState = "SAFETY";
-      }
+      if (currentState !== "SAFETY") nextState = "SAFETY";
     }
-    // If already in SAFETY, only exit when ALL return to 100%.
     else if (currentState === "SAFETY") {
-      if (minChance >= 1.0) {
+      if (minChance >= 1.0) nextState = "NORMAL";
+    }
+    else {
+      if (currentState !== "INFILTRATE" && anyContractEmpty) {
+        nextState = "INFILTRATE";
+      } else if (currentState === "INFILTRATE" && allContractsFull) {
         nextState = "NORMAL";
       }
     }
-    // RULE 5: RESUPPLY (Secondary Priority)
-    // Only consider if not in SAFETY (or needing to go there).
-    else {
-      // If any contract runs out, go to INFILTRATE
-      if (currentState !== "INFILTRATE" && anyContractEmpty) {
-        nextState = "INFILTRATE";
-      }
-      // If already in INFILTRATE, only exit when ALL have >= 100
-      else if (currentState === "INFILTRATE") {
-        if (allContractsFull) {
-          nextState = "NORMAL";
-        }
-      }
+    if (nextState !== currentState) {
+      ns.print(`[TRANSITION] State will change: ${currentState} -> ${nextState}`);
+    } else {
+      ns.print(`[TRANSITION] State remains: ${currentState}`);
     }
 
     // ============================================================
     // 3. STATE CHANGE EXECUTION (ACTION ON CHANGE)
     // ============================================================
     if (nextState !== currentState) {
-      ns.print(`🔄 State changed: ${currentState} -> ${nextState}`);
-
-      if (nextState === "SAFETY") {
-        ns.print(`⚠️ Low chance detected (${(minChance * 100).toFixed(1)}%). Executing Field Analysis.`);
-        // Rule 6: Execute dispatcher for Field Analysis
-        ns.run(DISPATCHER_SCRIPT, 1, "Bladeburner", "General", "Field Analysis");
-      }
-      else if (nextState === "INFILTRATE") {
-        ns.print(`📉 Contracts depleted. Executing Infiltrate Synthoids.`);
-        // Rule 5: Execute dispatcher for Infiltrate Synthoids
-        ns.run(DISPATCHER_SCRIPT, 1, "Bladeburner", "Infiltrate Synthoids");
-      }
-      else if (nextState === "NORMAL") {
-        ns.print(`✅ Normal operation resumed.`);
-      }
-
+      ns.print(`[STATE CHANGE] Executing change from ${currentState} -> ${nextState}`);
       currentState = nextState;
-      // Short pause to ensure dispatcher starts and applies tasks
-      await ns.sleep(500);
+      // Short pause to allow state to settle before next loop
+      await ns.sleep(100);
     }
 
     // ============================================================
-    // 4. STATE MAINTENANCE
+    // 4. STATE MAINTENANCE (ACTION)
     // ============================================================
-    if (currentState === "NORMAL") {
-      const numSleeves = ns.sleeve.getNumSleeves();
+    ns.print(`[MAINTENANCE] Performing actions for state: ${currentState}`);
+    const numSleeves = ns.sleeve.getNumSleeves();
 
-      for (let i = 0; i < numSleeves; i++) {
-        const task = ns.sleeve.getTask(i);
-        const isBladeburner = task && task.type === "BLADEBURNER";
-
-        // Only execute contracts if chance is 100%
-        if (minChance >= 1.0) {
-          // Rule 1: Sleeve 0 -> Tracking
-          if (i === 0) {
-            if (!isBladeburner || task.actionName !== "Tracking") {
-              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
-            }
-          }
-          // Rule 2: Sleeve 1 -> Bounty Hunter
-          else if (i === 1) {
-            if (!isBladeburner || task.actionName !== "Bounty Hunter") {
-              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
-            }
-          }
-          // Rule 3: Sleeve 2 -> Retirement
-          else if (i === 2) {
-            if (!isBladeburner || task.actionName !== "Retirement") {
-              ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
-            }
-          }
-          // Rule 4: Sleeve 3 and 4 (and others) -> Field Analysis
-          else {
-            if (!isBladeburner || task.actionName !== "Field Analysis") {
-              ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
-            }
-          }
-        } else {
-          // If chance < 100%, all sleeves do Field Analysis
-          if (!isBladeburner || task.actionName !== "Field Analysis") {
-            ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
-          }
+    for (let i = 0; i < numSleeves; i++) {
+      let success = false; // Variable to hold action success
+      ns.print(`-- Sleeve ${i} --`);
+      const sleeveInfo = ns.sleeve.getSleeve(i);
+      if (sleeveInfo.shock > 0) {
+        const currentTask = ns.sleeve.getTask(i);
+        if (currentTask?.type !== "RECOVERY") {
+          ns.print(`[Sleeve ${i}] Shock > 0 (${sleeveInfo.shock}). Setting to Shock Recovery.`);
+          success = ns.sleeve.setToShockRecovery(i);
+          ns.print(`[Sleeve ${i}] -> setToShockRecovery() returned: ${success}`);
         }
+        continue;
       }
-    } else {
-      // In SAFETY or INFILTRATE, only monitor and log periodically
-      // The dispatcher has already defined tasks on state transition.
-      if (currentState === "SAFETY") {
-        ns.print(`🛡️ SAFETY: Recovering chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
-      } else if (currentState === "INFILTRATE") {
-        ns.print(`🕵️ INFILTRATE: Farming contracts... (Min: ${minContractCount}/100)`);
+
+      const task = ns.sleeve.getTask(i);
+      const isBladeburner = task && task.type === "BLADEBURNER";
+      ns.print(`[Sleeve ${i}] Current Task: ${task ? `${task.type} - ${task.actionName || ''}` : 'IDLE'}`);
+
+      switch (currentState) {
+        case "NORMAL":
+          if (minChance >= 1.0) {
+            ns.print(`[Sleeve ${i}] State is NORMAL and chance is SAFE. Evaluating contract rules.`);
+            if (i === 0) {
+              if (!isBladeburner || task.actionName !== "Tracking") {
+                ns.print(`[Sleeve ${i}] Assigning contract: Tracking`);
+                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
+                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Tracking') returned: ${success}`);
+              }
+            } else if (i === 1) {
+              if (!isBladeburner || task.actionName !== "Bounty Hunter") {
+                ns.print(`[Sleeve ${i}] Assigning contract: Bounty Hunter`);
+                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
+                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Bounty Hunter') returned: ${success}`);
+              }
+            } else if (i === 2) {
+              if (!isBladeburner || task.actionName !== "Retirement") {
+                ns.print(`[Sleeve ${i}] Assigning contract: Retirement`);
+                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
+                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Retirement') returned: ${success}`);
+              }
+            } else {
+              if (!isBladeburner || task.actionName !== "Field Analysis") {
+                ns.print(`[Sleeve ${i}] Assigning: Field Analysis`);
+                success = ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
+                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Field Analysis') returned: ${success}`);
+              }
+            }
+          } else {
+            ns.print(`[Sleeve ${i}] State is NORMAL but chance is LOW (${(minChance * 100).toFixed(1)}%). Assigning Field Analysis as a precaution.`);
+            if (!isBladeburner || task.actionName !== "Field Analysis") {
+              success = ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
+              ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Field Analysis') returned: ${success}`);
+            }
+          }
+          break;
+
+        case "SAFETY":
+          ns.print(`[Sleeve ${i}] State is SAFETY. Assigning Field Analysis.`);
+          if (!isBladeburner || task.actionName !== "Field Analysis") {
+            success = ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
+            ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Field Analysis') returned: ${success}`);
+          }
+          break;
+
+        case "INFILTRATE":
+          ns.print(`[Sleeve ${i}] State is INFILTRATE. Assigning Infiltrate Synthoids.`);
+          if (!isBladeburner || task.actionName !== "Infiltrate Synthoids") {
+            success = ns.sleeve.setToBladeburnerAction(i, "Infiltrate Synthoids");
+            ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Infiltrate Synthoids') returned: ${success}`);
+          }
+          break;
       }
     }
 
+    // Logging for non-normal states
+    if (currentState === "SAFETY") {
+      ns.print(`🛡️ SAFETY: Recovering chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
+    } else if (currentState === "INFILTRATE") {
+      ns.print(`🕵️ INFILTRATE: Farming contracts... (Min: ${minContractCount}/100)`);
+    }
+
+    ns.print(`--- LOOP END ---`);
     await ns.sleep(2000);
   }
 }
