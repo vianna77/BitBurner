@@ -28,7 +28,8 @@ export async function main(ns) {
     return;
   }
 
-  const PREFIX = "p-";
+  const PREFIX_P = "p-";
+  const PREFIX_HACKNET = "hacknet-server-";
   const EXCLUDE = new Set([
     ".", "CSEC", "I.I.I.I", "avmnite-02h", "darkweb", "home", "run4theh111z"
   ]);
@@ -54,8 +55,8 @@ export async function main(ns) {
       if (!seen.has(n)) stack.push(n);
     }
 
-    // skip personal servers
-    if (host.startsWith(PREFIX)) {
+    // skip personal servers and hacknet servers
+    if (host.startsWith(PREFIX_P) || host.startsWith(PREFIX_HACKNET)) {
       continue;
     }
     // skip excluded
@@ -71,8 +72,11 @@ export async function main(ns) {
   // --- collect only servers you *can hack* ---
   const eligible = [];
   for (const server of servers) {
+    if (server.startsWith(PREFIX_HACKNET)) {
+      continue;
+    }
     const currentPservers = ns.getPurchasedServers();
-    if (currentPservers.some(ps => ps === PREFIX + server)) {
+    if (currentPservers.some(ps => ps === PREFIX_P + server)) {
       continue;
     }
 
@@ -132,7 +136,7 @@ export async function main(ns) {
       break;
     }
 
-    const name = PREFIX + server.name;
+    const name = PREFIX_P + server.name;
 
     if (currentPservers.some(ps => ps === name)) {
       ns.tprint(`✅ Already own ${name}. Skipping.`);

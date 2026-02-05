@@ -1,8 +1,8 @@
 // VERSION 6.0.0
-/** 
+/**
  * IPvGO Strategy Bot - Optimized for 5x5 Combat
  * Enhanced tactical AI with aggressive capture and defense priorities
- * @param {NS} ns 
+ * @param {NS} ns
  */
 export async function main(ns) {
   ns.disableLog("ALL");
@@ -20,7 +20,7 @@ export async function main(ns) {
   }
 
   let opponent = ns.args[0];
-  
+
   if (!opponent) {
     opponent = await ns.prompt("Choose the opponent:", {
       type: "select",
