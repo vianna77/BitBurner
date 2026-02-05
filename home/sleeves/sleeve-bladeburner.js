@@ -1,11 +1,9 @@
-// VERSION: 2.3.0
+// VERSION: 2.4.0
 // Sleeve Bladeburner Controller - Strict Rules Implementation
 
 /** @param {NS} ns */
 export async function main(ns) {
   ns.disableLog("ALL");
-
-  const DISPATCHER_SCRIPT = "/sleeves/sleeve-task-dispatcher.js";
 
   // Sleeve and Contract Configuration (Rules 1, 2, 3)
   const CONTRACT_RULES = [
@@ -15,9 +13,10 @@ export async function main(ns) {
   ];
 
   // Initial state
-  let currentState = "START"; // Possible states: START, NORMAL, SAFETY, INFILTRATE
+  let currentState = "START"; // Possible states: START, NORMAL, SAFETY
+  const sleeveInfiltrating = [false, false, false];
 
-  ns.print("🤖 Sleeve Bladeburner Controller v2.3.0 Started");
+  ns.print("🤖 Sleeve Bladeburner Controller v2.4.0 Started");
 
   while (true) {
     ns.print(`\n--- LOOP START --- Current State: ${currentState} ---`);
@@ -54,13 +53,6 @@ export async function main(ns) {
     }
     else if (currentState === "SAFETY") {
       if (minChance >= 1.0) nextState = "NORMAL";
-    }
-    else {
-      if (currentState !== "INFILTRATE" && anyContractEmpty) {
-        nextState = "INFILTRATE";
-      } else if (currentState === "INFILTRATE" && allContractsFull) {
-        nextState = "NORMAL";
-      }
     }
     if (nextState !== currentState) {
       ns.print(`[TRANSITION] State will change: ${currentState} -> ${nextState}`);
@@ -107,22 +99,55 @@ export async function main(ns) {
           if (minChance >= 1.0) {
             ns.print(`[Sleeve ${i}] State is NORMAL and chance is SAFE. Evaluating contract rules.`);
             if (i === 0) {
-              if (!isBladeburner || task.actionName !== "Tracking") {
-                ns.print(`[Sleeve ${i}] Assigning contract: Tracking`);
-                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
-                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Tracking') returned: ${success}`);
+              const count = bb.getActionCountRemaining("Contract", "Tracking");
+              if (count < 1) sleeveInfiltrating[0] = true;
+              if (count >= 100) sleeveInfiltrating[0] = false;
+              if (sleeveInfiltrating[0]) {
+                if (task?.type !== "INFILTRATE") {
+                  ns.print(`[Sleeve ${i}] Contract empty, infiltrating (${count}/100)`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Infiltrate Synthoids");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Infiltrate Synthoids') returned: ${success}`);
+                }
+              } else {
+                if (!isBladeburner || task.actionName !== "Tracking") {
+                  ns.print(`[Sleeve ${i}] Assigning contract: Tracking`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Tracking");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Tracking') returned: ${success}`);
+                }
               }
             } else if (i === 1) {
-              if (!isBladeburner || task.actionName !== "Bounty Hunter") {
-                ns.print(`[Sleeve ${i}] Assigning contract: Bounty Hunter`);
-                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
-                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Bounty Hunter') returned: ${success}`);
+              const count = bb.getActionCountRemaining("Contract", "Bounty Hunter");
+              if (count < 1) sleeveInfiltrating[1] = true;
+              if (count >= 100) sleeveInfiltrating[1] = false;
+              if (sleeveInfiltrating[1]) {
+                if (task?.type !== "INFILTRATE") {
+                  ns.print(`[Sleeve ${i}] Contract empty, infiltrating (${count}/100)`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Infiltrate Synthoids");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Infiltrate Synthoids') returned: ${success}`);
+                }
+              } else {
+                if (!isBladeburner || task.actionName !== "Bounty Hunter") {
+                  ns.print(`[Sleeve ${i}] Assigning contract: Bounty Hunter`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Bounty Hunter");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Bounty Hunter') returned: ${success}`);
+                }
               }
             } else if (i === 2) {
-              if (!isBladeburner || task.actionName !== "Retirement") {
-                ns.print(`[Sleeve ${i}] Assigning contract: Retirement`);
-                success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
-                ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Retirement') returned: ${success}`);
+              const count = bb.getActionCountRemaining("Contract", "Retirement");
+              if (count < 1) sleeveInfiltrating[2] = true;
+              if (count >= 100) sleeveInfiltrating[2] = false;
+              if (sleeveInfiltrating[2]) {
+                if (task?.type !== "INFILTRATE") {
+                  ns.print(`[Sleeve ${i}] Contract empty, infiltrating (${count}/100)`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Infiltrate Synthoids");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Infiltrate Synthoids') returned: ${success}`);
+                }
+              } else {
+                if (!isBladeburner || task.actionName !== "Retirement") {
+                  ns.print(`[Sleeve ${i}] Assigning contract: Retirement`);
+                  success = ns.sleeve.setToBladeburnerAction(i, "Take on contracts", "Retirement");
+                  ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Retirement') returned: ${success}`);
+                }
               }
             } else {
               if (!isBladeburner || task.actionName !== "Field Analysis") {
@@ -147,22 +172,12 @@ export async function main(ns) {
             ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Field Analysis') returned: ${success}`);
           }
           break;
-
-        case "INFILTRATE":
-          ns.print(`[Sleeve ${i}] State is INFILTRATE. Assigning Infiltrate Synthoids.`);
-          if (!isBladeburner || task.actionName !== "Infiltrate Synthoids") {
-            success = ns.sleeve.setToBladeburnerAction(i, "Infiltrate Synthoids");
-            ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Infiltrate Synthoids') returned: ${success}`);
-          }
-          break;
       }
     }
 
     // Logging for non-normal states
     if (currentState === "SAFETY") {
       ns.print(`🛡️ SAFETY: Recovering chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
-    } else if (currentState === "INFILTRATE") {
-      ns.print(`🕵️ INFILTRATE: Farming contracts... (Min: ${minContractCount}/100)`);
     }
 
     ns.print(`--- LOOP END ---`);
