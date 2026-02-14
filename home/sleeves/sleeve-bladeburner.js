@@ -5,7 +5,10 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
-  if (ns.isRunning("sleeves/sleeve-bladeburner.js", "home", ...ns.args)) {
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "sleeves/sleeve-bladeburner.js" && p.pid !== ns.pid
+  );
+  if (runningProcesses.length > 0) {
     ns.tprint("❌ ERROR: sleeve-bladeburner.js is already running!");
     return;
   }

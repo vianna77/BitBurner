@@ -29,7 +29,10 @@ const SCRIPT_SET_GYM = "/sleeves/setToGym.js";
 export async function main(ns) {
   ns.disableLog("ALL");
 
-  if (ns.isRunning("sleeves/sleeves-batcher-earlygame.js", "home", ...ns.args)) {
+  const runningProcesses = ns.ps("home").filter(p =>
+    p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
+  );
+  if (runningProcesses.length > 0) {
     ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running!");
     return;
   }
