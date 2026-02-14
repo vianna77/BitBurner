@@ -5,6 +5,12 @@
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  if (ns.isRunning("sleeves/sleeves-batcher-earlygame.js", "home")) {
+    ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running!");
+    ns.tprint("   Cannot run both sleeve scripts simultaneously.");
+    return;
+  }
+
   // Sleeve and Contract Configuration (Rules 1, 2, 3)
   const CONTRACT_RULES = [
     { id: 0, name: "Tracking" },

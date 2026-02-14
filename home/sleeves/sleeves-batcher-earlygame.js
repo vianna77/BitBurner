@@ -29,6 +29,12 @@ const SCRIPT_SET_GYM = "/sleeves/setToGym.js";
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  if (ns.isRunning("sleeves/sleeve-bladeburner.js", "home")) {
+    ns.tprint("❌ ERROR: sleeve-bladeburner.js is already running!");
+    ns.tprint("   Cannot run both sleeve scripts simultaneously.");
+    return;
+  }
+
   const checkDuplicateProcess = () => {
     const runningProcesses = ns.ps("home").filter(p =>
       p.filename === "sleeves/sleeves-batcher-earlygame.js" && p.pid !== ns.pid
