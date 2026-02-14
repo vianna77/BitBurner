@@ -29,6 +29,11 @@ const SCRIPT_SET_GYM = "/sleeves/setToGym.js";
 export async function main(ns) {
   ns.disableLog("ALL");
 
+  if (ns.isRunning("sleeves/sleeves-batcher-earlygame.js", "home", ...ns.args)) {
+    ns.tprint("❌ ERROR: sleeves-batcher-earlygame.js is already running!");
+    return;
+  }
+
   if (ns.isRunning("sleeves/sleeve-bladeburner.js", "home")) {
     ns.tprint("❌ ERROR: sleeve-bladeburner.js is already running!");
     ns.tprint("   Cannot run both sleeve scripts simultaneously.");
