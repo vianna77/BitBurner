@@ -192,10 +192,6 @@ export async function main(ns) {
         }
       }
 
-
-
-
-
       // 4. STRATEGIC EXPANSION (V6.0 Influence-based)
       if (x_move === undefined) {
         let potentialMoves = [];
