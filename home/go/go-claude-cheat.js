@@ -1,4 +1,4 @@
-// VERSION 2.0.0
+// VERSION 2.2.0
 /**
  * IPvGO Cheat Bot - Advanced tactical AI with surgical cheat application
  * Requires BitNode 14.2 to use cheat API
@@ -70,6 +70,7 @@ export async function main(ns) {
           const libs = getLiberties(board, x, y, new Set());
           if (libs.size === 1) {
             const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
+            ns.print(`🔎 Found atari on ${player} group at [${x},${y}]. Liberty at [${lx},${ly}]`);
             if (validMoves[lx][ly]) {
               return { x: lx, y: ly };
             }
@@ -283,43 +284,59 @@ export async function main(ns) {
         }
       }
 
-      // Advanced Normal Move Logic
+      // Advanced Normal Move Logic with Diagnostics
       if (!usedCheat) {
         let x_move, y_move;
+        let moveReason = "PASS";
 
         // 1. ATARI CAPTURE (Highest Priority)
         const captureMove = findAtariMove(board, validMoves, 'O');
-        if (captureMove && !wouldBeSuicide(board, captureMove.x, captureMove.y)) {
-          ns.print(`[ATARI CAPTURE] Capturing at [${captureMove.x}, ${captureMove.y}]!`);
-          x_move = captureMove.x;
-          y_move = captureMove.y;
+        if (captureMove) {
+          if (!wouldBeSuicide(board, captureMove.x, captureMove.y)) {
+            x_move = captureMove.x;
+            y_move = captureMove.y;
+            moveReason = `✅ ATARI CAPTURE`;
+          } else {
+            ns.print(`🟡 SKIPPED CAPTURE at [${captureMove.x}, ${captureMove.y}] - would be suicide.`);
+          }
         }
 
-        // 2. SELF-DEFENSE (Save own groups)
+        // 2. SELF-DEFENSE (Save own groups) - CRITICAL FIX
         if (x_move === undefined) {
           const saveMove = findAtariMove(board, validMoves, 'X');
-          if (saveMove && !wouldBeSuicide(board, saveMove.x, saveMove.y)) {
-            ns.print(`[DEFENSE] Saving group at [${saveMove.x}, ${saveMove.y}]`);
+          if (saveMove) {
+            // IGNORE SUICIDE CHECK FOR DEFENSE. Saving the group is paramount.
             x_move = saveMove.x;
             y_move = saveMove.y;
+            moveReason = `✅ DEFENSE`;
+            if (wouldBeSuicide(board, saveMove.x, saveMove.y)) {
+                ns.print(`⚠️ Forcing defense at [${x_move}, ${y_move}], ignoring suicide check.`);
+            }
           }
         }
 
         // 3. STRATEGIC EXPANSION (Influence-based)
         if (x_move === undefined) {
-          const best = findBestMoves(board, validMoves, 1)[0];
-          if (best) {
+          const bestMoves = findBestMoves(board, validMoves, 3);
+          if (bestMoves.length > 0) {
+            const best = bestMoves[0];
             x_move = best.x;
             y_move = best.y;
-            ns.print(`[STRATEGIC] Best move at [${x_move}, ${y_move}] (score: ${best.score.toFixed(1)})`);
+            moveReason = `✅ STRATEGIC`;
+            ns.print(`📝 Top 3 Strategic Moves:`);
+            for (const move of bestMoves) {
+              ns.print(`   - [${move.x},${move.y}] (Score: ${move.score.toFixed(1)})`);
+            }
           }
         }
 
         // Execute move
-        if (x_move === undefined) {
-          result = await ns.go.passTurn();
-        } else {
+        if (x_move !== undefined) {
+          ns.print(`${moveReason} -> [${x_move}, ${y_move}]`);
           result = await ns.go.makeMove(x_move, y_move);
+        } else {
+          ns.print("PASSING turn. No valid moves found.");
+          result = await ns.go.passTurn();
         }
       }
 
