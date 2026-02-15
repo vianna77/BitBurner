@@ -1,4 +1,4 @@
-// VERSION 1.4.0
+// VERSION 1.5.1
 /**
  * This script handles the grafting of specified augmentations.
  * It processes one augmentation completely (start and wait for completion)
@@ -23,6 +23,14 @@ export async function main(ns) {
     return;
   }
 
+  // Check if graftFullBlind.js is running
+  const conflictingScript = ns.ps("home").find(p => p.filename === "graftFullBlind.js");
+  if (conflictingScript) {
+    ns.tprint(`❌ ERROR: graftFullBlind.js is already running (PID: ${conflictingScript.pid})!`);
+    ns.tprint("   Cannot run both grafting scripts simultaneously.");
+    return;
+  }
+
   // --- CONFIGURATION ---
   const defaultAugmentations = [
     "SPTN-97 Gene Modification",
@@ -31,8 +39,7 @@ export async function main(ns) {
     "OmniTek InfoLoad",
     "ECorp HVMind Implant",
   ];
-  const travelCity = "New Tokyo";
-  const waitInterval = 30000; // 30 seconds
+
 
   // --- SCRIPT START ---
   ns.ui.openTail();
@@ -44,26 +51,14 @@ export async function main(ns) {
 
   // --- HEADER ---
   ns.print("=================================================");
-  ns.print("GRAFT MASTER v1.4.0");
+  ns.print("GRAFT MASTER v1.5.1");
   ns.print(`Grafting Queue: ${augmentationsToGraft.length} augmentation(s)`);
   augmentationsToGraft.forEach((aug, i) => ns.print(`  ${i + 1}. ${aug}`));
   ns.print("=================================================");
 
   // --- MAIN LOGIC ---
 
-  // 1. Travel to New Tokyo if not already there
-  if (ns.getPlayer().location !== travelCity) {
-    ns.print(`${getTS()}[INFO] ✈️ Traveling to ${travelCity}...`);
-    if (!ns.singularity.travelToCity(travelCity)) {
-      const msg = `Failed to travel to ${travelCity}. Stopping script.`;
-      ns.print(`${getTS()}[ERROR] ❌ ${msg}`);
-      ns.toast(msg, "error", 10000);
-      return;
-    }
-  }
-  ns.print(`${getTS()}[SUCCESS] ✅ Player is in ${travelCity}.`);
-
-  // 2. Process each augmentation in the queue
+  // Process each augmentation in the queue
   for (const augName of augmentationsToGraft) {
     ns.print("-------------------------------------------------");
     ns.print(`${getTS()}[INFO] ⚙️ Processing augmentation: ${augName}`);
@@ -82,15 +77,14 @@ export async function main(ns) {
     await ns.grafting.waitForOngoingGrafting();
     ns.print(`${getTS()}[SUCCESS] ✅ Ready to start new graft.`);
 
-    // Check money and wait if necessary
+    // Check money
     const cost = ns.grafting.getAugmentationGraftPrice(augName);
     ns.print(`${getTS()}[INFO] 💰 Cost for ${augName}: ${ns.formatNumber(cost)}`);
 
-    while (ns.getPlayer().money < cost) {
-      ns.print(`${getTS()}[WAIT] 💸 Not enough money. Need ${ns.formatNumber(cost)}. Waiting ${waitInterval / 1000}s...`);
-      await ns.sleep(waitInterval);
+    if (ns.getPlayer().money < cost) {
+      ns.print(`${getTS()}[SKIP] 💸 Insufficient funds for ${augName}. Need ${ns.formatNumber(cost)}. Skipping.`);
+      continue;
     }
-    ns.print(`${getTS()}[SUCCESS] ✅ Money requirement met.`);
 
     // Start grafting
     ns.print(`${getTS()}[INFO] 🚀 Attempting to start graft for ${augName}...`);
