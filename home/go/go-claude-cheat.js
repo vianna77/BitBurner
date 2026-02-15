@@ -70,18 +70,73 @@ export async function main(ns) {
   }
 
   function findBestTwoMoves(board, validMoves) {
+    const copyBoard = (b) => b.map(row => [...row]);
+    const copyValidMoves = (m) => JSON.parse(JSON.stringify(m));
+
+    // Strategy 1: If opponent is in atari, capture it. The second move is the best positional move.
+    const captureMove = findAtariMove(board, validMoves, 'O');
+    if (captureMove) {
+      const tempValidMoves = copyValidMoves(validMoves);
+      tempValidMoves[captureMove.x][captureMove.y] = false;
+      const secondMove = findBestPositionalMove(tempValidMoves);
+      if (secondMove) {
+        ns.print("🎯 Cheat Strategy 1: Immediate Capture + Positional");
+        return [captureMove, secondMove];
+      }
+    }
+
+    // Strategy 2: Find a two-move sequence to create and then execute an atari.
+    for (let x1 = 0; x1 < 5; x1++) {
+      for (let y1 = 0; y1 < 5; y1++) {
+        if (!validMoves[x1][y1]) continue;
+
+        const tempBoard = copyBoard(board);
+        tempBoard[x1][y1] = 'X';
+
+        const tempValidMoves = copyValidMoves(validMoves);
+        tempValidMoves[x1][y1] = false;
+
+        const setupCaptureMove = findAtariMove(tempBoard, tempValidMoves, 'O');
+        if (setupCaptureMove) {
+          ns.print("🎯 Cheat Strategy 2: Atari Setup + Capture");
+          return [{ x: x1, y: y1 }, setupCaptureMove];
+        }
+      }
+    }
+
+    // Strategy 3: Best positional move, then re-evaluate for a second move.
+    const firstPositionalMove = findBestPositionalMove(validMoves);
+    if (firstPositionalMove) {
+      const tempValidMoves1 = copyValidMoves(validMoves);
+      tempValidMoves1[firstPositionalMove.x][firstPositionalMove.y] = false;
+      const tempBoard = copyBoard(board);
+      tempBoard[firstPositionalMove.x][firstPositionalMove.y] = 'X';
+
+      // 3a: Check if the positional move created a capture opportunity.
+      const postPositionalCapture = findAtariMove(tempBoard, tempValidMoves1, 'O');
+      if (postPositionalCapture) {
+        ns.print("🎯 Cheat Strategy 3a: Positional + Surprise Capture");
+        return [firstPositionalMove, postPositionalCapture];
+      }
+
+      // 3b: If not, just take the next best positional move.
+      const secondPositionalMove = findBestPositionalMove(tempValidMoves1);
+      if (secondPositionalMove) {
+        ns.print("🎯 Cheat Strategy 3b: Double Positional");
+        return [firstPositionalMove, secondPositionalMove];
+      }
+    }
+
+    // Fallback: If all smart strategies fail, use the original simple scoring.
+    ns.print("🎯 Cheat Strategy F: Fallback (original scoring)");
     const moves = [];
     for (let x = 0; x < 5; x++) {
       for (let y = 0; y < 5; y++) {
         if (validMoves[x][y]) {
           let score = 0;
-          if (x === 2 && y === 2) {
-            score = 100;
-          } else if ((x === 1 || x === 3) && (y === 1 || y === 3)) {
-            score = 60;
-          } else {
-            score = 30;
-          }
+          if (x === 2 && y === 2) score = 100;
+          else if ((x === 1 || x === 3) && (y === 1 || y === 3)) score = 60;
+          else score = 30;
           moves.push({ x, y, score });
         }
       }
