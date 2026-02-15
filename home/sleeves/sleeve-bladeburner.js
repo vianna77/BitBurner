@@ -1,4 +1,4 @@
-// VERSION: 2.4.6
+// VERSION: 2.5.0
 // Sleeve Bladeburner Controller - Strict Rules Implementation
 
 /** @param {NS} ns */
@@ -27,10 +27,10 @@ export async function main(ns) {
   ];
 
   // Initial state
-  let currentState = "START"; // Possible states: START, NORMAL, SAFETY
+  let currentState = "START"; // Possible states: START, NORMAL, SAFETY, CHAOSCONTROL
   const sleeveInfiltrating = [false, false, false];
 
-  ns.print("🤖 Sleeve Bladeburner Controller v2.4.6 Started");
+  ns.print("🤖 Sleeve Bladeburner Controller v2.5.0 Started");
 
   while (true) {
     ns.print(`\n--- LOOP START --- Current State: ${currentState} ---`);
@@ -60,17 +60,31 @@ export async function main(ns) {
     }
     ns.print(`[DATA] Overall minChance: ${(minChance * 100).toFixed(2)}% | anyContractEmpty: ${anyContractEmpty} | allContractsFull: ${allContractsFull}`);
 
+    const currentCity = bb.getCity();
+    const cityChaos = bb.getCityChaos(currentCity);
+    ns.print(`[DATA] City Chaos in ${currentCity}: ${cityChaos.toFixed(2)}`);
+
     // ============================================================
     // 2. TRANSITION LOGIC (TRANSITION)
     // ============================================================
     let nextState = currentState;
     if (currentState === "START") nextState = "NORMAL";
 
-    if (minChance < 1.0) {
-      if (currentState !== "SAFETY") nextState = "SAFETY";
-    }
-    else if (currentState === "SAFETY") {
-      if (minChance >= 1.0) nextState = "NORMAL";
+    if (cityChaos > 50) {
+      nextState = "CHAOSCONTROL";
+    } else if (currentState === "CHAOSCONTROL" && cityChaos < 20) {
+      if (minChance < 1.0) {
+        nextState = "SAFETY";
+      } else {
+        nextState = "NORMAL";
+      }
+    } else if (currentState !== "CHAOSCONTROL") {
+      if (minChance < 1.0) {
+        if (currentState !== "SAFETY") nextState = "SAFETY";
+      }
+      else if (currentState === "SAFETY") {
+        if (minChance >= 1.0) nextState = "NORMAL";
+      }
     }
     if (nextState !== currentState) {
       ns.print(`[TRANSITION] State will change: ${currentState} -> ${nextState}`);
@@ -198,11 +212,30 @@ export async function main(ns) {
             }
           }
           break;
+
+        case "CHAOSCONTROL":
+          if (i >= 3) {
+            ns.print(`[Sleeve ${i}] State is CHAOSCONTROL. Assigning Diplomacy.`);
+            if (!isBladeburner || task.actionName !== "Diplomacy") {
+              success = ns.sleeve.setToBladeburnerAction(i, "Diplomacy");
+              ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Diplomacy') returned: ${success}`);
+            }
+          } else {
+            ns.print(`[Sleeve ${i}] State is CHAOSCONTROL. Assigning Field Analysis.`);
+            if (!isBladeburner || task.actionName !== "Field Analysis") {
+              success = ns.sleeve.setToBladeburnerAction(i, "Field Analysis");
+              ns.print(`[Sleeve ${i}] -> setToBladeburnerAction('Field Analysis') returned: ${success}`);
+            }
+          }
+          break;
       }
     }
 
     if (currentState === "SAFETY") {
       ns.print(`🛡️ SAFETY: Recovering chances... (Min: ${(minChance * 100).toFixed(1)}%)`);
+    }
+    if (currentState === "CHAOSCONTROL") {
+      ns.print(`🟡 CHAOSCONTROL: Reducing chaos with Diplomacy... (Chaos: ${cityChaos.toFixed(1)})`);
     }
 
     ns.print(`--- LOOP END ---`);
