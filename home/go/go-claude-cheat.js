@@ -1,7 +1,8 @@
-// VERSION 6.0.0
+// VERSION 7.0.0
 /**
- * IPvGO Strategy Bot - Optimized for 5x5 Combat
- * Enhanced tactical AI with aggressive capture and defense priorities
+ * IPvGO Strategy Bot - Optimized for 5x5 Combat with Cheat Integration
+ * Enhanced tactical AI with aggressive capture, defense, and cheat tactics
+ * Requires BitNode 14.2 for cheat functionality
  * @param {NS} ns
  */
 export async function main(ns) {
@@ -151,7 +152,76 @@ export async function main(ns) {
     return undefined;
   }
 
-  // 2. SELF-DEFENSE - Save own groups in atari
+  // 2. CHEAT TACTICS - Strategic cheat moves (PRIORITY: before self-defense)
+  function findCheatMove(board, validMoves) {
+    try {
+      const cheatChance = ns.go.cheat.getCheatSuccessChance();
+      ns.print(`[CHEAT] Success chance: ${(cheatChance * 100).toFixed(1)}%`);
+
+      // Only use cheats if chance is reasonable (>70%)
+      if (cheatChance < 0.7) {
+        return undefined;
+      }
+
+      // Strategy 1: playTwoMoves - Double threat or capture+defend
+      const topMoves = [];
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+          if (board[x][y] === '.') {
+            const score = evaluatePosition(board, x, y);
+            topMoves.push({ x, y, score });
+          }
+        }
+      }
+
+      if (topMoves.length >= 2) {
+        topMoves.sort((a, b) => b.score - a.score);
+        const move1 = topMoves[0];
+        const move2 = topMoves[1];
+
+        // Use playTwoMoves if both moves are valuable
+        if (move1.score > 80 && move2.score > 60) {
+          ns.print(`[CHEAT] playTwoMoves at [${move1.x},${move1.y}] + [${move2.x},${move2.y}]`);
+          return { type: 'playTwoMoves', x1: move1.x, y1: move1.y, x2: move2.x, y2: move2.y };
+        }
+      }
+
+      // Strategy 2: removeRouter - Remove critical enemy stone (>80% chance)
+      if (cheatChance > 0.8) {
+        let bestTarget = null;
+        let maxConnections = 0;
+
+        for (let x = 0; x < 5; x++) {
+          for (let y = 0; y < 5; y++) {
+            if (board[x][y] === 'O') {
+              const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+              let connections = 0;
+              for (const [nx, ny] of neighbors) {
+                if (nx >= 0 && nx < 5 && ny >= 0 && ny < 5 && board[nx][ny] === 'O') {
+                  connections++;
+                }
+              }
+              if (connections > maxConnections) {
+                maxConnections = connections;
+                bestTarget = { x, y };
+              }
+            }
+          }
+        }
+
+        if (bestTarget && maxConnections >= 2) {
+          ns.print(`[CHEAT] removeRouter at [${bestTarget.x},${bestTarget.y}] (${maxConnections} connections)`);
+          return { type: 'removeRouter', x: bestTarget.x, y: bestTarget.y };
+        }
+      }
+    } catch (error) {
+      ns.print(`[CHEAT] Not available (requires BitNode 14.2)`);
+    }
+
+    return undefined;
+  }
+
+  // 3. SELF-DEFENSE - Save own groups in atari
   function findSelfDefense(board, validMoves) {
     for (let x = 0; x < 5; x++) {
       for (let y = 0; y < 5; y++) {
@@ -212,20 +282,22 @@ export async function main(ns) {
       const validMoves = ns.go.analysis.getValidMoves();
       const board = ns.go.getBoardState();
 
-      // Decision priority chain
+      // Decision priority chain: ATARI > CHEAT > DEFENSE > STRATEGIC
       const move = findAtariCapture(board, validMoves) ||
-                   findSelfDefense(board, validMoves) ||
-                   findStrategicExpansion(board, validMoves);
-
-      const x_move = move?.x;
-      const y_move = move?.y;
+        findCheatMove(board, validMoves) ||
+        findSelfDefense(board, validMoves) ||
+        findStrategicExpansion(board, validMoves);
 
       // Execute move
       let result;
-      if (x_move === undefined) {
-        result = await ns.go.passTurn();
+      if (move?.type === 'playTwoMoves') {
+        result = await ns.go.cheat.playTwoMoves(move.x1, move.y1, move.x2, move.y2);
+      } else if (move?.type === 'removeRouter') {
+        result = await ns.go.cheat.removeRouter(move.x, move.y);
+      } else if (move) {
+        result = await ns.go.makeMove(move.x, move.y);
       } else {
-        result = await ns.go.makeMove(x_move, y_move);
+        result = await ns.go.passTurn();
       }
 
       if (result?.type === "gameOver") {
