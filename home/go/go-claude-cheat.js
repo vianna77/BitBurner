@@ -2,15 +2,15 @@
 /**
  * IPvGO Cheat Bot - Uses illicit moves strategically
  * Requires BitNode 14.2 to use cheat API
- * 
+ *
  * Cheat Moves Available:
  * - playTwoMoves: Place two routers at once
  * - removeRouter: Remove an existing router
  * - destroyNode: Destroy an empty node (creates dead space)
  * - repairOfflineNode: Repair an offline node
- * 
+ *
  * Warning: Failed cheats skip your turn and have ~10% chance of ejection after first attempt
- * 
+ *
  * @param {NS} ns
  */
 export async function main(ns) {
@@ -104,6 +104,50 @@ export async function main(ns) {
     return null;
   }
 
+  function findAtariMove(board, validMoves, player) {
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        if (board[x][y] === player) {
+          const libs = getLiberties(board, x, y, new Set());
+          if (libs.size === 1) {
+            const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
+            if (validMoves[lx][ly]) {
+              return { x: lx, y: ly };
+            }
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  function findBestPositionalMove(validMoves) {
+    let bestScore = -1;
+    let x_move, y_move;
+
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        if (validMoves[x][y]) {
+          let score = 0;
+          if (x === 2 && y === 2) {
+            score = 100;
+          } else if ((x === 1 || x === 3) && (y === 1 || y === 3)) {
+            score = 60;
+          } else {
+            score = 30;
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            x_move = x;
+            y_move = y;
+          }
+        }
+      }
+    }
+    if (bestScore === -1) return undefined;
+    return { x: x_move, y: y_move };
+  }
+
   let totalWins = 0;
   let totalLosses = 0;
   const startTime = Date.now();
@@ -158,79 +202,18 @@ export async function main(ns) {
 
       // Normal move if no cheat used
       if (!usedCheat) {
-        let x_move = undefined;
-        let y_move = undefined;
-
-        // Capture enemy in atari
-        for (let x = 0; x < 5; x++) {
-          for (let y = 0; y < 5; y++) {
-            if (board[x][y] === 'O') {
-              const libs = getLiberties(board, x, y, new Set());
-              if (libs.size === 1) {
-                const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
-                if (validMoves[lx][ly]) {
-                  x_move = lx;
-                  y_move = ly;
-                  break;
-                }
-              }
-            }
-          }
-          if (x_move !== undefined) {
-            break;
-          }
+        let move = findAtariMove(board, validMoves, 'O'); // Capture
+        if (!move) {
+          move = findAtariMove(board, validMoves, 'X'); // Save
+        }
+        if (!move) {
+          move = findBestPositionalMove(validMoves); // Best position
         }
 
-        // Defend own stones
-        if (x_move === undefined) {
-          for (let x = 0; x < 5; x++) {
-            for (let y = 0; y < 5; y++) {
-              if (board[x][y] === 'X') {
-                const libs = getLiberties(board, x, y, new Set());
-                if (libs.size === 1) {
-                  const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
-                  if (validMoves[lx][ly]) {
-                    x_move = lx;
-                    y_move = ly;
-                    break;
-                  }
-                }
-              }
-            }
-            if (x_move !== undefined) {
-              break;
-            }
-          }
-        }
-
-        // Strategic move
-        if (x_move === undefined) {
-          let bestScore = -1;
-          for (let x = 0; x < 5; x++) {
-            for (let y = 0; y < 5; y++) {
-              if (validMoves[x][y]) {
-                let score = 0;
-                if (x === 2 && y === 2) {
-                  score = 100;
-                } else if ((x === 1 || x === 3) && (y === 1 || y === 3)) {
-                  score = 60;
-                } else {
-                  score = 30;
-                }
-                if (score > bestScore) {
-                  bestScore = score;
-                  x_move = x;
-                  y_move = y;
-                }
-              }
-            }
-          }
-        }
-
-        if (x_move === undefined) {
+        if (!move) {
           result = await ns.go.passTurn();
         } else {
-          result = await ns.go.makeMove(x_move, y_move);
+          result = await ns.go.makeMove(move.x, move.y);
         }
       }
 
