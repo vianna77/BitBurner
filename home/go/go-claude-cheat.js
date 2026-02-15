@@ -130,6 +130,69 @@ export async function main(ns) {
     return score;
   }
 
+  // 1. ATARI CAPTURE - Find enemy stones in atari
+  function findAtariCapture(board, validMoves) {
+    ns.print(`[DEBUG] Scanning for enemy atari...`);
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        if (board[x][y] === 'O') {
+          const libs = getLiberties(board, x, y, new Set());
+          ns.print(`[DEBUG] Enemy stone at [${x},${y}] has ${libs.size} liberties`);
+          if (libs.size === 1) {
+            const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
+            if (validMoves[lx][ly]) {
+              ns.print(`[ATARI CAPTURE] Enemy in atari - capturing at [${lx}, ${ly}]!`);
+              return { x: lx, y: ly };
+            }
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  // 2. SELF-DEFENSE - Save own groups in atari
+  function findSelfDefense(board, validMoves) {
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        if (board[x][y] === 'X') {
+          const libs = getLiberties(board, x, y, new Set());
+          if (libs.size === 1) {
+            const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
+            if (validMoves[lx][ly] && !wouldBeSuicide(board, lx, ly)) {
+              ns.print(`[DEFENSE] Saving group at [${lx}, ${ly}]`);
+              return { x: lx, y: ly };
+            }
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  // 4. STRATEGIC EXPANSION - Influence-based positioning
+  function findStrategicExpansion(board, validMoves) {
+    let potentialMoves = [];
+
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        if (validMoves[x][y] && !isEye(board, x, y, 'X') && !wouldBeSuicide(board, x, y)) {
+          const score = evaluatePosition(board, x, y);
+          potentialMoves.push({ x, y, score });
+        }
+      }
+    }
+
+    if (potentialMoves.length > 0) {
+      potentialMoves.sort((a, b) => b.score - a.score);
+      const best = potentialMoves[0];
+      ns.print(`[STRATEGIC] Best move at [${best.x}, ${best.y}] (score: ${best.score.toFixed(1)})`);
+      return { x: best.x, y: best.y };
+    }
+
+    return undefined;
+  }
+
   let totalWins = 0;
   let totalLosses = 0;
   const startTime = Date.now();
@@ -149,69 +212,13 @@ export async function main(ns) {
       const validMoves = ns.go.analysis.getValidMoves();
       const board = ns.go.getBoardState();
 
-      let x_move = undefined;
-      let y_move = undefined;
+      // Decision priority chain
+      const move = findAtariCapture(board, validMoves) ||
+                   findSelfDefense(board, validMoves) ||
+                   findStrategicExpansion(board, validMoves);
 
-      // 1. ATARI CAPTURE - ABSOLUTE PRIORITY - NO FILTERS!
-      ns.print(`[DEBUG] Scanning for enemy atari...`);
-      for (let x = 0; x < 5; x++) {
-        for (let y = 0; y < 5; y++) {
-          if (board[x][y] === 'O') {
-            const libs = getLiberties(board, x, y, new Set()); // Fresh visited set!
-            ns.print(`[DEBUG] Enemy stone at [${x},${y}] has ${libs.size} liberties`);
-            if (libs.size === 1) {
-              const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
-              if (validMoves[lx][ly]) {
-                ns.print(`[ATARI CAPTURE] Enemy in atari - capturing at [${lx}, ${ly}]!`);
-                x_move = lx; y_move = ly;
-                break;
-              }
-            }
-          }
-        }
-        if (x_move !== undefined) break;
-      }
-
-      // 2. SELF-DEFENSE
-      if (x_move === undefined) {
-        for (let x = 0; x < 5; x++) {
-          for (let y = 0; y < 5; y++) {
-            if (board[x][y] === 'X') {
-              const libs = getLiberties(board, x, y, new Set()); // Fresh visited set!
-              if (libs.size === 1) {
-                const [lx, ly] = Array.from(libs)[0].split(',').map(Number);
-                if (validMoves[lx][ly] && !wouldBeSuicide(board, lx, ly)) {
-                  ns.print(`[DEFENSE] Saving group at [${lx}, ${ly}]`);
-                  x_move = lx; y_move = ly;
-                  break;
-                }
-              }
-            }
-          }
-          if (x_move !== undefined) break;
-        }
-      }
-
-      // 4. STRATEGIC EXPANSION (V6.0 Influence-based)
-      if (x_move === undefined) {
-        let potentialMoves = [];
-
-        for (let x = 0; x < 5; x++) {
-          for (let y = 0; y < 5; y++) {
-            if (validMoves[x][y] && !isEye(board, x, y, 'X') && !wouldBeSuicide(board, x, y)) {
-              const score = evaluatePosition(board, x, y);
-              potentialMoves.push({ x, y, score });
-            }
-          }
-        }
-
-        if (potentialMoves.length > 0) {
-          potentialMoves.sort((a, b) => b.score - a.score);
-          x_move = potentialMoves[0].x;
-          y_move = potentialMoves[0].y;
-          ns.print(`[STRATEGIC] Best move at [${x_move}, ${y_move}] (score: ${potentialMoves[0].score.toFixed(1)})`);
-        }
-      }
+      const x_move = move?.x;
+      const y_move = move?.y;
 
       // Execute move
       let result;
