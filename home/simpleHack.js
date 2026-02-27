@@ -1,6 +1,6 @@
-// VERSION: simpleHack.js v1.3.0
-// DESCRIPTION: Single-target hacking script: Weaken at minSec+10 -> Grow to full -> Hack to empty.
-// UPDATES: Simplified logic - weaken when sec > minSec+10, grow to full, hack to empty.
+// VERSION: simpleHack.js v1.3.1
+// DESCRIPTION: Single-target hacking script: Weaken at minSec+10 -> Grow to full -> Hack to 5%.
+// UPDATES: Fixed infinite loop - now stops hacking at 5% of max money instead of 0.
 
 /** @param {NS} ns **/
 export function autocomplete(data, args) {
@@ -22,7 +22,7 @@ export async function main(ns) {
     ns.tprint("==================================================================");
     ns.tprint("USAGE: run simpleHack.js <target>");
     ns.tprint("EXAMPLE: run simpleHack.js n00dles");
-    ns.tprint("LOGIC: Weaken at minSec+10 -> Grow to full -> Hack to empty");
+    ns.tprint("LOGIC: Weaken at minSec+10 -> Grow to full -> Hack to 5%");
     ns.tprint("==================================================================");
     return;
   }
@@ -91,10 +91,10 @@ export async function main(ns) {
       continue;
     }
 
-    // 3. HACK until empty
-    if (money > 0) {
+    // 3. HACK until 5% of max money
+    if (money > maxMoney * 0.05) {
       ns.print("Starting HACK: Server has money.");
-      while (ns.getServerMoneyAvailable(target) > 0) {
+      while (ns.getServerMoneyAvailable(target) > maxMoney * 0.05) {
         hCount++;
         logState("HACK", hCount, ns.getServerMoneyAvailable(target), ns.getServerSecurityLevel(target));
         await ns.hack(target);

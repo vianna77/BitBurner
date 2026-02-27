@@ -25,24 +25,13 @@ export async function main(ns) {
   const priceHistory = new Map();
   symbols.forEach(sym => priceHistory.set(sym, []));
 
+  // This map now stores stocks we've detected we own, and their fixed starting price.
   const ownedStocks = new Map();
   let tickCounter = 0;
   const ANALYSIS_INTERVAL = 10;
 
   ns.print(`${t()} 📈 Starting stock price watcher...`);
-
-  // -- New Logic: Capture initial prices for stocks owned at script start --
-  ns.print(`${t()} 🔍 Capturing initial state of portfolio...`);
-  for (const sym of symbols) {
-    const [shares] = ns.stock.getPosition(sym);
-    if (shares > 0) {
-      const initialPrice = ns.stock.getPrice(sym);
-      ownedStocks.set(sym, { initialPrice });
-      ns.print(`   ✅ ${sym} owned. Locking initial price at ${ns.formatNumber(initialPrice, 2)}`);
-    }
-  }
-  ns.print(`${t()}  portfolio scan complete. Found ${ownedStocks.size} owned stocks.`);
-  ns.print(`${t()} Analysis will run every ${ANALYSIS_INTERVAL * 6} seconds.`);
+  ns.print(`${t()} Portfolio will be scanned every ${ANALYSIS_INTERVAL * 6} seconds.`);
 
   while (true) {
     // 1. Update prices for all symbols
@@ -58,10 +47,26 @@ export async function main(ns) {
     tickCounter++;
 
     if (tickCounter >= ANALYSIS_INTERVAL) {
-      // Check if any initially-owned stocks were sold
+      // -- New Logic: Dynamically update portfolio every cycle --
+      const currentPortfolio = new Set();
+      for (const sym of symbols) {
+        if (ns.stock.getPosition(sym)[0] > 0) {
+          currentPortfolio.add(sym);
+        }
+      }
+
+      // Check for newly purchased stocks
+      for (const sym of currentPortfolio) {
+        if (!ownedStocks.has(sym)) {
+          const initialPrice = ns.stock.getPrice(sym);
+          ownedStocks.set(sym, { initialPrice });
+          ns.print(`${t()} ✅ Detected new purchase of ${sym}. Locking price at ${ns.formatNumber(initialPrice, 2)}`);
+        }
+      }
+
+      // Check for sold stocks
       for (const sym of ownedStocks.keys()) {
-        const [shares] = ns.stock.getPosition(sym);
-        if (shares === 0) {
+        if (!currentPortfolio.has(sym)) {
           ns.print(`${t()} 🟡 Detected sale of ${sym}. It will no longer be pinned.`);
           ownedStocks.delete(sym);
         }
@@ -85,7 +90,6 @@ export async function main(ns) {
         const isOwnedAndTracked = ownedStocks.has(sym);
         const currentPrice = history[history.length - 1];
 
-        // Use the locked-in initial price for owned stocks, otherwise use the window's first price
         const startPrice = isOwnedAndTracked ? ownedStocks.get(sym).initialPrice : history[0];
         const percentGain = ((currentPrice / startPrice) - 1) * 100;
 
