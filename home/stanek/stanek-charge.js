@@ -8,12 +8,24 @@
  *
  * The charge power is determined by the number of threads this script is running with.
  *
- * @version 2.2.0
+ * @version 2.3.0
  */
 
 /**
  * @param {NS} ns The Netscript API.
  */
+/**
+ * Get fragment effect text
+ * @param {NS} ns
+ * @param {number} fragmentId
+ * @returns {string}
+ */
+function getFragmentEffect(ns, fragmentId) {
+  const definitions = ns.stanek.fragmentDefinitions();
+  const definition = definitions.find(def => def.id === fragmentId);
+  return definition?.effect ?? "Unknown";
+}
+
 /**
  * Check if a fragment is a booster (non-chargeable)
  * @param {NS} ns
@@ -21,9 +33,8 @@
  * @returns {boolean}
  */
 function isBooster(ns, fragmentId) {
-  const definitions = ns.stanek.fragmentDefinitions();
-  const definition = definitions.find(def => def.id === fragmentId);
-  return definition?.effect.toLowerCase().includes("adjacent") ?? false;
+  const effect = getFragmentEffect(ns, fragmentId);
+  return effect.toLowerCase().includes("adjacent");
 }
 
 export async function main(ns) {
@@ -42,9 +53,10 @@ export async function main(ns) {
     fragments.forEach((fragment, i) => {
       const charge = (fragment.numCharge ?? 0).toFixed(2);
       const best = (fragment.highestCharge ?? 0).toFixed(2);
+      const effect = getFragmentEffect(ns, fragment.id);
       const booster = isBooster(ns, fragment.id);
       const status = booster ? "🚫 Booster" : "⚡ Chargeable";
-      ns.tprint(`  [${i}] ${status} | ID: ${fragment.id} | Coords: (${fragment.x}, ${fragment.y}) | Charge: ${charge} | Best: ${best}`);
+      ns.tprint(`  [${i}] ${status} | ID: ${fragment.id} | Coords: (${fragment.x}, ${fragment.y}) | Charge: ${charge} | Best: ${best} | Effect: ${effect}`);
     });
     ns.tprint("\nTo start charging, run the script with the desired fragment index.");
     ns.tprint("Example: run stanek-charge.js 0");
