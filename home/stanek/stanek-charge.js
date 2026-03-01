@@ -8,12 +8,24 @@
  *
  * The charge power is determined by the number of threads this script is running with.
  *
- * @version 2.0.0
+ * @version 2.2.0
  */
 
 /**
  * @param {NS} ns The Netscript API.
  */
+/**
+ * Check if a fragment is a booster (non-chargeable)
+ * @param {NS} ns
+ * @param {number} fragmentId
+ * @returns {boolean}
+ */
+function isBooster(ns, fragmentId) {
+  const definitions = ns.stanek.fragmentDefinitions();
+  const definition = definitions.find(def => def.id === fragmentId);
+  return definition?.effect.toLowerCase().includes("adjacent") ?? false;
+}
+
 export async function main(ns) {
   const fragmentIndex = ns.args[0];
 
@@ -26,9 +38,13 @@ export async function main(ns) {
   }
 
   if (fragmentIndex === undefined) {
-    ns.tprint("📋 Listing all chargeable fragments of Stanek's Gift:");
+    ns.tprint("📋 Listing all fragments of Stanek's Gift:");
     fragments.forEach((fragment, i) => {
-      ns.tprint(`  [${i}] ID: ${fragment.id} | Coords: (${fragment.x}, ${fragment.y}) | Charge: ${fragment.numCharge.toFixed(2)} | Best: ${fragment.highestCharge.toFixed(2)}`);
+      const charge = (fragment.numCharge ?? 0).toFixed(2);
+      const best = (fragment.highestCharge ?? 0).toFixed(2);
+      const booster = isBooster(ns, fragment.id);
+      const status = booster ? "🚫 Booster" : "⚡ Chargeable";
+      ns.tprint(`  [${i}] ${status} | ID: ${fragment.id} | Coords: (${fragment.x}, ${fragment.y}) | Charge: ${charge} | Best: ${best}`);
     });
     ns.tprint("\nTo start charging, run the script with the desired fragment index.");
     ns.tprint("Example: run stanek-charge.js 0");
@@ -44,6 +60,15 @@ export async function main(ns) {
   const targetFragment = fragments[index];
   const { x, y, id } = targetFragment;
 
+  if (isBooster(ns, id)) {
+    ns.tprint(`🚫 ERROR: Fragment ID ${id} at index [${index}] is a Booster and cannot be charged.`);
+    ns.tprint("Boosters enhance adjacent fragments but are not chargeable themselves.");
+    return;
+  }
+
+  const initialCharge = targetFragment.numCharge ?? 0;
+  let chargeCount = 0;
+
   ns.tprint(`⚡ Targeting fragment ID ${id} at index [${index}] (${x}, ${y}). Starting continuous charge...`);
 
   // Infinite loop to continuously charge the fragment.
@@ -51,6 +76,14 @@ export async function main(ns) {
   while (true) {
     try {
       await ns.stanek.chargeFragment(x, y);
+      chargeCount++;
+
+      if (chargeCount % 10 === 0) {
+        const current = ns.stanek.activeFragments()[index];
+        const currentCharge = current?.numCharge ?? 0;
+        const gain = currentCharge - initialCharge;
+        ns.print(`⚡ Charges: ${chargeCount} | Current: ${currentCharge.toFixed(2)} | Gain: +${gain.toFixed(2)}`);
+      }
     } catch (error) {
       ns.tprint(`❌ ERROR: Failed to charge fragment at (${x}, ${y}). It might have been moved or become invalid.`);
       ns.tprint("Please list the fragments again to check their status. Exiting script.");
