@@ -1,4 +1,4 @@
-// VERSION 1.5.1
+// VERSION 1.5.2
 /**
  * This script handles the grafting of specified augmentations.
  * It processes one augmentation completely (start and wait for completion)
@@ -10,7 +10,8 @@
  */
 export async function main(ns) {
   ns.disableLog('ALL');
-
+  ns.ui.resizeTail(990, 745);
+  ns.ui.moveTail(600, 50);
   // Check if script is already running
   const runningProcesses = ns.ps("home").filter(p =>
     p.filename === ns.getScriptName() && p.pid !== ns.pid
@@ -36,10 +37,18 @@ export async function main(ns) {
     "SPTN-97 Gene Modification",
     "CordiARC Fusion Reactor",
     "Xanipher",
+    "Neuroreceptor Management Implant",
+    "BrachiBlades",
+    "Graphene BrachiBlades Upgrade",
+    "nextSENS Gene Modification",
+    "Photosynthetic Cells",
+    "The Black Hand",
     "OmniTek InfoLoad",
     "ECorp HVMind Implant",
   ];
 
+  // list for hack oriented nodes like BN8:
+  // ./graftMaster.js "Neuroreceptor Management Implant" "QLink" "Xanipher" "OmniTek InfoLoad" "BitRunners Neurolink" "ECorp HVMind Implant" "HyperSight Corneal Implant" "Neuregen Gene Modification" "Embedded Netburner Module" "nextSENS Gene Modification" "Embedded Netburner Module Analyze Engine" "Embedded Netburner Module Core Implant" "Embedded Netburner Module Core V2 Upgrade"
 
   // --- SCRIPT START ---
   ns.ui.openTail();
@@ -51,7 +60,7 @@ export async function main(ns) {
 
   // --- HEADER ---
   ns.print("=================================================");
-  ns.print("GRAFT MASTER v1.5.1");
+  ns.print("GRAFT MASTER v1.5.2");
   ns.print(`Grafting Queue: ${augmentationsToGraft.length} augmentation(s)`);
   augmentationsToGraft.forEach((aug, i) => ns.print(`  ${i + 1}. ${aug}`));
   ns.print("=================================================");
@@ -85,6 +94,10 @@ export async function main(ns) {
       ns.print(`${getTS()}[SKIP] 💸 Insufficient funds for ${augName}. Need ${ns.formatNumber(cost)}. Skipping.`);
       continue;
     }
+
+    // Check time
+    const time = ns.grafting.getAugmentationGraftTime(augName);
+    ns.print(`${getTS()}[INFO] 🕒 Estimate time for ${augName}: ${ns.tFormat(time)}`);
 
     // Start grafting
     ns.print(`${getTS()}[INFO] 🚀 Attempting to start graft for ${augName}...`);
