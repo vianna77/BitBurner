@@ -48,7 +48,7 @@ export async function main(ns) {
   ];
 
   // list for hack oriented nodes like BN8:
-  // ./graftMaster.js "Neuroreceptor Management Implant" "QLink" "Xanipher" "OmniTek InfoLoad" "BitRunners Neurolink" "ECorp HVMind Implant" "HyperSight Corneal Implant" "Neuregen Gene Modification" "Embedded Netburner Module" "nextSENS Gene Modification" "Embedded Netburner Module Analyze Engine" "Embedded Netburner Module Core Implant" "Embedded Netburner Module Core V2 Upgrade"
+  // ./graftMaster.js "Neuroreceptor Management Implant" "QLink" "Xanipher" "OmniTek InfoLoad" "BitRunners Neurolink" "ECorp HVMind Implant" "HyperSight Corneal Implant" "Neuregen Gene Modification" "Neural-Retention Enhancement" "Embedded Netburner Module" "nextSENS Gene Modification" "Embedded Netburner Module Core Implant" "Embedded Netburner Module Core V2 Upgrade" "Embedded Netburner Module Core V3 Upgrade" "Neuralstimulator" "Artificial Bio-neural Network Implant" "Neuronal Densification" "Neural Accelerator"
 
   // --- SCRIPT START ---
   ns.ui.openTail();
@@ -57,7 +57,7 @@ export async function main(ns) {
 
   const colors = {
     white: "\u001b[37m",
-    lightGray: "\u001b[90m",
+    cyan: "\u001b[36m",
     reset: "\u001b[0m"
   };
 
@@ -85,7 +85,7 @@ export async function main(ns) {
 
       if (ownedAugs.includes(aug)) {
         statusSymbol = '✅'; // Done
-        augColor = colors.lightGray;
+        augColor = colors.cyan;
       } else if (aug === augName) {
         statusSymbol = '⚙️'; // Current
         augColor = colors.white;
