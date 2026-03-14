@@ -1,4 +1,4 @@
-// VERSION 1.5.2
+// VERSION 2.0.0
 /**
  * This script handles the grafting of specified augmentations.
  * It processes one augmentation completely (start and wait for completion)
@@ -55,14 +55,19 @@ export async function main(ns) {
 
   const augmentationsToGraft = ns.args.length > 0 ? ns.args : defaultAugmentations;
 
+  const colors = {
+    white: "\u001b[37m",
+    lightGray: "\u001b[90m",
+    reset: "\u001b[0m"
+  };
+
   // --- HELPERS ---
   const getTS = () => `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] `;
 
   // --- HEADER ---
   ns.print("=================================================");
-  ns.print("GRAFT MASTER v1.5.2");
-  ns.print(`Grafting Queue: ${augmentationsToGraft.length} augmentation(s)`);
-  augmentationsToGraft.forEach((aug, i) => ns.print(`  ${i + 1}. ${aug}`));
+  ns.print("GRAFT MASTER v2.0.0");
+  ns.print(`Initial Grafting Queue: ${augmentationsToGraft.length} augmentation(s)`);
   ns.print("=================================================");
 
   // --- MAIN LOGIC ---
@@ -70,18 +75,36 @@ export async function main(ns) {
   // Process each augmentation in the queue
   for (const augName of augmentationsToGraft) {
     ns.print("-------------------------------------------------");
-    ns.print(`${getTS()}[INFO] ⚙️ Processing augmentation: ${augName}`);
+
+    // Display Queue Status
+    ns.print(`${getTS()}[INFO] 📝 Grafting Queue Status:`);
+    const ownedAugs = ns.singularity.getOwnedAugmentations(true);
+    augmentationsToGraft.forEach((aug, i) => {
+      let statusSymbol;
+      let augColor;
+
+      if (ownedAugs.includes(aug)) {
+        statusSymbol = '✅'; // Done
+        augColor = colors.lightGray;
+      } else if (aug === augName) {
+        statusSymbol = '⚙️'; // Current
+        augColor = colors.white;
+      } else {
+        statusSymbol = '⏳'; // Pending
+        augColor = ""; // Default color
+      }
+      ns.print(`${augColor}${statusSymbol} ${i + 1}. ${aug}${colors.reset}`);
+    });
+    ns.print("-------------------------------------------------");
+
 
     // Check if augmentation is already installed
-    const ownedAugs = ns.singularity.getOwnedAugmentations(true);
     if (ownedAugs.includes(augName)) {
       ns.print(`${getTS()}[SKIP] ⏭️ ${augName} is already installed. Skipping.`);
       continue;
     }
 
     // Safety check: ensure no other graft is running before we start.
-    // This handles cases where the script is started while a graft is
-    // already in progress.
     ns.print(`${getTS()}[INFO] ⏳ Verifying no graft is in progress...`);
     await ns.grafting.waitForOngoingGrafting();
     ns.print(`${getTS()}[SUCCESS] ✅ Ready to start new graft.`);
