@@ -5,6 +5,21 @@
  * Requires BitNode 14.2 for cheat functionality
  * @param {NS} ns
  */
+
+/** @param {NS} ns **/
+export function autocomplete(data, args) {
+  return [
+    "No AI",
+    "Netburners",
+    "Slum Snakes",
+    "The Black Hand",
+    "Tetrads",
+    "Daedalus",
+    "Illuminati",
+    "????????????"
+  ];
+}
+
 export async function main(ns) {
   ns.disableLog("ALL");
 
@@ -20,7 +35,7 @@ export async function main(ns) {
     return;
   }
 
-  let opponent = ns.args[0];
+  let opponent = ns.args.join(" ");
 
   if (!opponent) {
     opponent = await ns.prompt("Choose the opponent:", {
@@ -36,6 +51,8 @@ export async function main(ns) {
       return;
     }
   }
+
+  ns.tprint(`🎯 Opponent selected: ${opponent}`);
 
   // Enhanced Liberty Scanner - Optimized for 5x5
   function getLiberties(board, x, y, visited = new Set()) {
