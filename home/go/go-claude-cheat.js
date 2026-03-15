@@ -275,7 +275,14 @@ export async function main(ns) {
     let gameOver = false;
 
     // Simple center opening
-    let result = await ns.go.makeMove(2, 2);
+    let result = null;
+    try {
+      result = await ns.go.makeMove(2, 2);
+    }
+    catch (error) {
+      result = await ns.go.makeMove(1, 2);
+    }
+
     if (result?.type === "gameOver") gameOver = true;
 
     while (!gameOver) {
